@@ -1,0 +1,35 @@
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+._.venv
+backend/.venv/
+
+# macOS / OS metadata files
+._*
+.DS_Store
+
+# Python cache & build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Node / React Frontend
+node_modules/
+hr-frontend/node_modules/
+hr-frontend/dist/
+.eslintcache
+
+# SQLite Database & Data
+
+# Dataset images (optional)
+dataset/
+backend/dataset/
+
+# Environment Variables
+.env
+.env.local
+.env.production
