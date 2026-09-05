@@ -165,8 +165,17 @@ export default function Kiosk() {
       if (data.status === 'success' && facesList.length > 0) {
         const first = facesList[0];
         if (first.name && first.name !== 'unknown') {
-          const displayName = first.name;
+          let displayName = first.name;
           const empId = first.employee_id || '';
+
+          if (empId && displayName.startsWith(empId)) {
+            displayName = displayName.substring(empId.length).replace(/^[_ -]+/, '').replace(/_/g, ' ').trim() || displayName;
+          } else if (displayName.startsWith('EMP_') || displayName.startsWith('EMP-')) {
+            const parts = displayName.split('_');
+            if (parts.length >= 3) {
+              displayName = parts.slice(2).join(' ');
+            }
+          }
 
           setRecognitionResult({
             type: 'prompt',
@@ -176,7 +185,13 @@ export default function Kiosk() {
             confidence: (first.confidence * 100).toFixed(1),
             todayStatus: first.today_status || {}
           });
-          speak(`${displayName} detected. Please select an action.`);
+          
+          if (first.today_status && first.today_status.checkout) {
+            speak(`${spokenName}, attendance already completed for today.`);
+            setTimeout(() => setRecognitionResult(null), 4000); // auto dismiss after speaking
+          } else {
+            speak(`${spokenName} detected. Please select an action.`);
+          }
         } else {
           setRecognitionResult({ type: 'unknown', message: 'No face recognized in dataset.' });
           speak('Unknown face detected.');

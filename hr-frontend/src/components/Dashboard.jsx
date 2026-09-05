@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Users, FileText, LogOut, LayoutDashboard, Camera, ExternalLink, AlertTriangle, X, UserPlus, Clock, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { Users, FileText, LogOut, LayoutDashboard, Camera, ExternalLink, AlertTriangle, X, UserPlus, Clock, ChevronLeft, ChevronRight, ChevronDown, Menu, Settings as SettingsIcon, Calendar } from 'lucide-react';
 import { apiCall, getWebSocketUrl } from '../api';
 
 export default function Dashboard() {
@@ -8,6 +8,37 @@ export default function Dashboard() {
   const location = useLocation();
   const [unknownAlerts, setUnknownAlerts] = useState([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedMenu, setExpandedMenu] = useState(location.pathname.startsWith('/employees') ? '/employees' : '');
+  const [companyName, setCompanyName] = useState('IdentiFi HR');
+  const [logoUrl, setLogoUrl] = useState('/logo.png');
+
+  const loadSettings = async () => {
+    try {
+      const data = await apiCall('/settings/');
+      if (data.companyName) setCompanyName(data.companyName);
+      if (data.logoUrl) setLogoUrl(data.logoUrl);
+    } catch (err) {
+      console.error("Failed to load settings:", err);
+      const savedName = localStorage.getItem('companyName');
+      const savedLogo = localStorage.getItem('logoUrl');
+      if (savedName) setCompanyName(savedName);
+      if (savedLogo) setLogoUrl(savedLogo);
+    }
+  };
+
+  useEffect(() => {
+    loadSettings();
+    const handleSettingsUpdate = (e) => {
+      if (e.detail) {
+        setCompanyName(e.detail.companyName);
+        setLogoUrl(e.detail.logoUrl);
+      } else {
+        loadSettings();
+      }
+    };
+    window.addEventListener('settingsUpdated', handleSettingsUpdate);
+    return () => window.removeEventListener('settingsUpdated', handleSettingsUpdate);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -17,10 +48,20 @@ export default function Dashboard() {
 
   const navItems = [
     { path: '/', label: 'Overview', icon: <LayoutDashboard size={20} /> },
-    { path: '/employees', label: 'Employees', icon: <Users size={20} /> },
+    {
+      path: '/employees',
+      label: 'Employees',
+      icon: <Users size={20} />,
+      subItems: [
+        { path: '/employees?tab=list', label: 'Directory', icon: <Users size={16} /> },
+        { path: '/employees?tab=register', label: 'Add New', icon: <UserPlus size={16} /> },
+        { path: '/employees?tab=face', label: 'Face Data', icon: <Camera size={16} /> },
+      ]
+    },
     { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
     { path: '/unknown-identity', label: 'Unknown Identity', icon: <AlertTriangle size={20} /> },
     { path: '/kiosk', label: 'Live Recognition', icon: <Camera size={20} /> },
+    { path: '/settings', label: 'Settings', icon: <SettingsIcon size={20} /> },
   ];
 
   useEffect(() => {
@@ -76,7 +117,7 @@ export default function Dashboard() {
         })
       });
       
-      const parts = alert.enrollName.split('_');
+      const parts = alert.enrollName.split(/[_ ]/);
       if (parts.length >= 2) {
         const empId = parts[0];
         try {
@@ -108,16 +149,6 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Mobile Hamburger Button */}
-      {!isSidebarOpen && (
-        <button 
-          onClick={() => setIsSidebarOpen(true)}
-          className="md:hidden absolute top-4 left-4 z-30 bg-brand-navy text-white p-2 rounded-xl shadow-lg hover:bg-brand-blue transition-colors"
-        >
-          <Menu size={24} />
-        </button>
-      )}
-
       {/* Sidebar */}
       <aside className={`bg-gradient-to-b from-brand-navy to-brand-dark text-white flex flex-col shadow-xl z-50 transition-all duration-300 absolute md:relative h-full ${
         isSidebarOpen ? 'w-64 translate-x-0' : '-translate-x-full md:translate-x-0 md:w-20'
@@ -130,44 +161,96 @@ export default function Dashboard() {
           {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
         </button>
 
-        <div className={`h-16 flex items-center px-4 border-b border-brand-dark/50 bg-black/10 flex-shrink-0 ${isSidebarOpen ? 'justify-center' : 'justify-center'}`}>
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="IdentiFi Logo" className={`w-auto object-contain rounded-full transition-all duration-300 ${isSidebarOpen ? 'h-12' : 'h-10'}`} />
-            {isSidebarOpen && (
-              <h1 className="text-2xl font-black tracking-tight text-white flex items-baseline gap-1.5 whitespace-nowrap overflow-hidden animate-in fade-in zoom-in duration-300">
-                IdentiFi <span className="text-brand-teal text-xl">HR</span>
-              </h1>
-            )}
+        <div className="h-16 flex items-center px-4 border-b border-brand-dark/50 bg-black/10 flex-shrink-0 justify-center">
+          <div className="flex items-center justify-center w-full overflow-hidden">
+            <img src={logoUrl} alt="Logo" className={`w-auto object-contain rounded-full flex-shrink-0 transition-all duration-300 ${isSidebarOpen ? 'h-12' : 'h-10'}`} />
           </div>
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center px-4 py-3 rounded-lg transition-colors overflow-hidden ${
-                isSidebarOpen ? 'justify-between' : 'justify-center'
-              } ${
-                location.pathname === item.path 
-                  ? 'bg-brand-teal text-white shadow-md' 
-                  : 'text-gray-300 hover:bg-white/10 hover:text-white'
-              }`}
-              title={!isSidebarOpen ? item.label : ""}
-            >
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">{item.icon}</div>
-                {isSidebarOpen && <span className="font-medium tracking-wide whitespace-nowrap animate-in fade-in duration-300">{item.label}</span>}
+          {navItems.map((item) => {
+            const hasSub = !!item.subItems;
+            const isExpanded = expandedMenu === item.path;
+            const isEmployeesTab = location.pathname.startsWith('/employees') && item.path === '/employees';
+            const isActive = location.pathname === item.path || isEmployeesTab;
+
+            const handleParentClick = (e) => {
+              if (hasSub) {
+                setExpandedMenu(isExpanded ? '' : item.path);
+              } else {
+                setExpandedMenu('');
+                if (window.innerWidth < 768) {
+                  setIsSidebarOpen(false);
+                }
+              }
+            };
+
+            return (
+              <div key={item.path} className="space-y-1">
+                <Link
+                  to={item.path}
+                  onClick={handleParentClick}
+                  className={`flex items-center px-4 py-3 rounded-lg transition-colors overflow-hidden ${
+                    isSidebarOpen ? 'justify-between' : 'justify-center'
+                  } ${
+                    isActive
+                      ? 'bg-brand-navy/50 text-white shadow-inner'
+                      : 'text-gray-300 hover:bg-white/10 hover:text-white'
+                  }`}
+                  title={!isSidebarOpen ? item.label : ""}
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-shrink-0">{item.icon}</div>
+                    {isSidebarOpen && <span className="font-medium tracking-wide whitespace-nowrap animate-in fade-in duration-300">{item.label}</span>}
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {item.path === '/unknown-identity' && unknownAlerts.length > 0 && (
+                      <span className={`bg-red-500 text-white font-bold rounded-full animate-pulse shadow-sm flex items-center justify-center ${
+                        isSidebarOpen ? 'text-[10px] px-2 py-0.5' : 'absolute top-2 right-2 h-4 w-4 text-[9px]'
+                      }`}>
+                        {unknownAlerts.length}
+                      </span>
+                    )}
+                    {isSidebarOpen && item.subItems && (
+                      <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180 text-white' : 'text-gray-400'}`}>
+                        <ChevronDown size={16} />
+                      </div>
+                    )}
+                  </div>
+                </Link>
+
+                {isExpanded && item.subItems && (
+                  <div className={`${isSidebarOpen ? 'pl-12 pr-4' : 'px-2'} py-2 space-y-1 animate-in slide-in-from-top-2 duration-300`}>
+                    {item.subItems.map(sub => {
+                      const search = new URLSearchParams(location.search);
+                      const tab = search.get('tab') || 'list';
+                      const subTab = new URLSearchParams(sub.path.split('?')[1]).get('tab');
+                      const isSubActive = tab === subTab;
+                      return (
+                        <Link
+                          key={sub.path}
+                          to={sub.path}
+                          onClick={() => {
+                            if (window.innerWidth < 768) {
+                              setIsSidebarOpen(false);
+                            }
+                          }}
+                          className={`flex items-center ${isSidebarOpen ? 'space-x-3 px-3' : 'justify-center'} py-2 rounded-lg transition-colors text-sm ${
+                            isSubActive ? 'bg-brand-teal text-white shadow-md font-semibold' : 'text-gray-400 hover:text-white hover:bg-white/10'
+                          }`}
+                          title={!isSidebarOpen ? sub.label : ""}
+                        >
+                          <div className="flex-shrink-0">{sub.icon}</div>
+                          {isSidebarOpen && <span>{sub.label}</span>}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              {item.path === '/unknown-identity' && unknownAlerts.length > 0 && (
-                <span className={`bg-red-500 text-white font-bold rounded-full animate-pulse shadow-sm flex items-center justify-center ${
-                  isSidebarOpen ? 'text-[10px] px-2 py-0.5' : 'absolute top-2 right-2 h-4 w-4 text-[9px]'
-                }`}>
-                  {unknownAlerts.length}
-                </span>
-              )}
-            </Link>
-          ))}
+            );
+          })}
         </nav>
 
         <div className={`p-4 border-t border-brand-dark/50 bg-black/10 space-y-2 flex-shrink-0 overflow-hidden`}>
@@ -194,9 +277,38 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto w-full">
-        <div className="p-4 pt-16 md:pt-8 md:p-8 mx-auto w-full">
-          <Outlet context={{ unknownAlerts, setUnknownAlerts, handleEnroll }} />
+      <main className="flex-1 overflow-auto w-full relative min-w-0">
+
+        {/* Mobile Top Bar */}
+        <div className="md:hidden sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="text-brand-navy p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Menu size={24} />
+          </button>
+          <span className="font-bold text-gray-800 tracking-tight">{companyName}</span>
+        </div>
+
+        <div className="px-4 py-3 md:px-8 md:pt-4 md:pb-6 mx-auto flex flex-col min-h-full">
+          {location.pathname === '/' && (
+            <header className="mb-4 animate-in fade-in slide-in-from-top-4 duration-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">
+                  Welcome <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-teal to-brand-blue">{companyName}</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">Manage your workforce efficiently.</p>
+              </div>
+              <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 text-xs sm:text-sm font-bold text-gray-700 hidden md:flex items-center gap-2 w-full md:w-auto shrink-0 justify-center">
+                <Calendar size={16} className="text-brand-teal" />
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+            </header>
+          )}
+
+          <div className="flex-1">
+            <Outlet context={{ unknownAlerts, setUnknownAlerts, handleEnroll }} />
+          </div>
         </div>
       </main>
     </div>

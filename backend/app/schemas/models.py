@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 class LoginRequest(BaseModel):
     username: str
@@ -11,6 +11,9 @@ class EmployeeRegistration(BaseModel):
     domain: str
     department: Optional[str] = None
     position: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    custom_fields: Optional[Dict[str, str]] = None
 
 class DatasetCreateRequest(BaseModel):
     name: str

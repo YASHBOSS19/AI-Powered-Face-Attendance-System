@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { AlertTriangle, UserPlus, Clock, X, Trash2 } from 'lucide-react';
+import { useOutletContext, useNavigate } from 'react-router-dom';
+import { AlertTriangle, UserPlus, Clock, X, Trash2, ChevronLeft } from 'lucide-react';
 import { apiCall } from '../api';
 
 export default function UnknownIdentity() {
+  const navigate = useNavigate();
   const context = useOutletContext();
   const unknownAlerts = context?.unknownAlerts || [];
   const setUnknownAlerts = context?.setUnknownAlerts || (() => {});
@@ -16,24 +17,28 @@ export default function UnknownIdentity() {
 
   return (
     <div className="space-y-8 mx-auto">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">Unknown Identity Alerts</h2>
-            {unknownAlerts.length > 0 && (
-              <div className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-200">
-                <AlertTriangle size={14} className="animate-pulse" /> {unknownAlerts.length} PENDING
-              </div>
-            )}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
+        <div className="flex items-center gap-4">
+          <div onClick={() => navigate('/')} className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors shrink-0 text-gray-500 hover:text-brand-navy shadow-sm bg-white" title="Back to Dashboard">
+            <ChevronLeft size={20} />
           </div>
-          <p className="text-sm text-gray-500 mt-1">Review unrecognized faces captured by the gate kiosk and enroll them into the system.</p>
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-black text-gray-900 tracking-tight whitespace-nowrap">Unknown Identity Alerts</h2>
+              {unknownAlerts.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-200 whitespace-nowrap shrink-0 shadow-sm">
+                  <AlertTriangle size={14} className="animate-pulse shrink-0" /> <span>{unknownAlerts.length} PENDING</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         {unknownAlerts.length > 0 && (
           <button 
             onClick={() => setUnknownAlerts([])}
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+            className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
-            <X size={16} /> Clear All Alerts
+            <X size={16} className="shrink-0" /> <span>Clear All Alerts</span>
           </button>
         )}
       </div>

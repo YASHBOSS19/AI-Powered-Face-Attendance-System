@@ -5,9 +5,7 @@ import {
   UserCheck, 
   Clock, 
   AlertTriangle, 
-  Radio, 
   Search, 
-  Building, 
   ArrowUpRight, 
   CheckCircle2, 
   LogOut, 
@@ -23,6 +21,7 @@ export default function Overview() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deptSearchQuery, setDeptSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, present, late, checkout
   const [toast, setToast] = useState(null);
 
@@ -104,6 +103,10 @@ export default function Overview() {
     return true;
   });
 
+  const filteredDepartments = (summary?.department_summary || []).filter(dept =>
+    (dept.department || '').toLowerCase().includes(deptSearchQuery.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-gray-500 animate-pulse">
@@ -120,30 +123,24 @@ export default function Overview() {
     : 0;
 
   return (
-    <div className="space-y-8 mx-auto">
+    <div className="space-y-5 mx-auto">
       
       {/* Header & Quick Action Launcher */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 gap-4">
         <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">HR Command Center</h2>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-              <Radio size={14} className="animate-pulse text-emerald-600" /> LIVE GATE SYNC
-            </div>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">Real-time gate attendance monitoring, analytics & workforce status for today ({summary?.today_date}).</p>
+          <h2 className="text-2xl font-black text-gray-900 tracking-tight whitespace-nowrap">HR Command Center</h2>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           <Link 
-            to="/employees" 
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+            to="/employees?tab=register" 
+            className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <UserPlus size={16} /> Register Profile
           </Link>
           <Link 
             to="/reports" 
-            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5"
+            className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <FileText size={16} /> Reports
           </Link>
@@ -151,7 +148,7 @@ export default function Overview() {
             href="/gate" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="px-4 py-2.5 bg-gradient-to-r from-brand-navy to-brand-teal text-white font-bold text-xs rounded-xl hover:shadow-lg transition flex items-center gap-1.5 shadow-sm"
+            className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-brand-navy to-brand-teal text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 whitespace-nowrap shrink-0"
           >
             <Camera size={16} /> Launch Gate Terminal
           </a>
@@ -175,82 +172,88 @@ export default function Overview() {
       )}
 
       {/* 4 Core KPI Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         
         {/* Card 1: Total Employees */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition">
+        <div className="bg-white p-3.5 sm:p-4 rounded-none border border-gray-100 flex items-center justify-between transition">
           <div>
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">Total Workforce</span>
-            <div className="text-3xl font-black text-gray-900">{summary?.total_employees || 0}</div>
-            <span className="text-xs text-gray-500 font-medium mt-1 block">Registered Active Profiles</span>
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Total Workforce</span>
+            <div className="text-xl sm:text-2xl font-black text-gray-900">{summary?.total_employees || 0}</div>
+            <span className="text-[11px] text-gray-500 font-medium mt-0.5 block">Registered Active Profiles</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-inner">
-            <Users size={24} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-none bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Users size={18} />
           </div>
         </div>
 
         {/* Card 2: Present Today */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition">
+        <div className="bg-white p-3.5 sm:p-4 rounded-none border border-gray-100 flex items-center justify-between transition">
           <div>
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">Present Today</span>
-            <div className="text-3xl font-black text-emerald-600">{summary?.present_today || 0}</div>
-            <span className="text-xs text-emerald-700 font-bold mt-1 block">{attendanceRate}% Attendance Rate</span>
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Present Today</span>
+            <div className="text-xl sm:text-2xl font-black text-emerald-600">{summary?.present_today || 0}</div>
+            <span className="text-[11px] text-emerald-700 font-bold mt-0.5 block">{attendanceRate}% Attendance Rate</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner">
-            <UserCheck size={24} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-none bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <UserCheck size={18} />
           </div>
         </div>
 
         {/* Card 3: On-Time Arrivals */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition">
+        <div className="bg-white p-3.5 sm:p-4 rounded-none border border-gray-100 flex items-center justify-between transition">
           <div>
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">On-Time Arrivals</span>
-            <div className="text-3xl font-black text-teal-600">{summary?.on_time_count || 0}</div>
-            <span className="text-xs text-gray-500 font-medium mt-1 block">Checked in before 10:00 AM</span>
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">On-Time Arrivals</span>
+            <div className="text-xl sm:text-2xl font-black text-teal-600">{summary?.on_time_count || 0}</div>
+            <span className="text-[11px] text-gray-500 font-medium mt-0.5 block">Checked in before 10:00 AM</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center shadow-inner">
-            <CheckCircle2 size={24} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-none bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 size={18} />
           </div>
         </div>
 
         {/* Card 4: Late Arrivals */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition">
+        <div className="bg-white p-3.5 sm:p-4 rounded-none border border-gray-100 flex items-center justify-between transition">
           <div>
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">Late Arrivals</span>
-            <div className="text-3xl font-black text-amber-600">{summary?.late_count || 0}</div>
-            <span className="text-xs text-amber-700 font-medium mt-1 block">Checked in after 10:00 AM</span>
+            <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Late Arrivals</span>
+            <div className="text-xl sm:text-2xl font-black text-amber-600">{summary?.late_count || 0}</div>
+            <span className="text-[11px] text-amber-700 font-medium mt-0.5 block">Checked in after 10:00 AM</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-inner">
-            <AlertTriangle size={24} />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-none bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <AlertTriangle size={18} />
           </div>
         </div>
 
       </div>
 
       {/* Main Grid: Today's Live Attendance Table & Department Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
         {/* Left Column (2 Cols): Today's Attendance Activity Table */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+        <div className="lg:col-span-2 bg-white rounded-none border border-gray-100 overflow-hidden flex flex-col">
           
-          <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
-                <Clock size={20} className="text-brand-teal" /> Today's Gate Attendance Logs
-              </h3>
-              <p className="text-xs text-gray-500 mt-0.5">Real-time records logged from the entrance kiosk</p>
-            </div>
+          <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h3 className="font-bold text-lg text-gray-900">
+              Today's Gate Attendance Logs
+            </h3>
 
             {/* Search Input */}
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
               <input
                 type="text"
                 placeholder="Search name, ID or department..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal outline-none transition"
+                className="w-full pl-9 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-none text-xs focus:bg-white focus:ring-1 focus:ring-brand-teal focus:border-brand-teal outline-none transition"
               />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -258,36 +261,37 @@ export default function Overview() {
           <div className="px-6 py-3 bg-gray-50/50 border-b border-gray-100 flex gap-2 overflow-x-auto text-xs font-semibold">
             <button 
               onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-lg transition ${statusFilter === 'all' ? 'bg-brand-navy text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200/60'}`}
+              className={`px-3 py-1.5 rounded-none transition ${statusFilter === 'all' ? 'bg-brand-navy text-white' : 'text-gray-600 hover:bg-gray-200/60'}`}
             >
               All Today ({summary?.today_records?.length || 0})
             </button>
             <button 
               onClick={() => setStatusFilter('present')}
-              className={`px-3 py-1.5 rounded-lg transition ${statusFilter === 'present' ? 'bg-green-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200/60'}`}
+              className={`px-3 py-1.5 rounded-none transition ${statusFilter === 'present' ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-200/60'}`}
             >
               On-Time ({summary?.on_time_count || 0})
             </button>
             <button 
               onClick={() => setStatusFilter('late')}
-              className={`px-3 py-1.5 rounded-lg transition ${statusFilter === 'late' ? 'bg-amber-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200/60'}`}
+              className={`px-3 py-1.5 rounded-none transition ${statusFilter === 'late' ? 'bg-amber-600 text-white' : 'text-gray-600 hover:bg-gray-200/60'}`}
             >
               Late ({summary?.late_count || 0})
             </button>
             <button 
               onClick={() => setStatusFilter('checkout')}
-              className={`px-3 py-1.5 rounded-lg transition ${statusFilter === 'checkout' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200/60'}`}
+              className={`px-3 py-1.5 rounded-none transition ${statusFilter === 'checkout' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-200/60'}`}
             >
               Checked Out ({summary?.today_records?.filter(r => r.checkout).length || 0})
             </button>
           </div>
 
           {/* Records Table */}
-          <div className="overflow-x-auto flex-1">
+          <div className="overflow-x-auto overflow-y-auto flex-1 max-h-[450px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <table className="min-w-full divide-y divide-gray-100">
               <thead className="bg-gray-50/80">
                 <tr>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee Name</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Department</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Check-In</th>
                   <th className="px-6 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Check-Out</th>
@@ -297,14 +301,16 @@ export default function Overview() {
               <tbody className="bg-white divide-y divide-gray-100">
                 {filteredRecords.map((row) => (
                   <tr key={row.id} className="hover:bg-blue-50/40 transition">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-700">
+                      {row.employee_id || 'N/A'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-brand-navy to-brand-teal text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-brand-navy to-brand-teal text-white flex items-center justify-center font-bold text-sm">
                           {getCleanName(row.name).charAt(0).toUpperCase()}
                         </div>
                         <div className="ml-3">
                           <div className="text-sm font-semibold text-gray-900">{getCleanName(row.name)}</div>
-                          <div className="text-xs text-gray-400 font-mono">{row.employee_id || 'N/A'}</div>
                         </div>
                       </div>
                     </td>
@@ -322,7 +328,7 @@ export default function Overview() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-bold uppercase rounded-full shadow-sm ${
+                      <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-bold uppercase rounded-none ${
                         row.status === 'present' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-amber-100 text-amber-800 border border-amber-200'
                       }`}>
                         {row.status}
@@ -333,8 +339,8 @@ export default function Overview() {
 
                 {filteredRecords.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400 text-sm">
-                      No matching attendance records found for today.
+                    <td colSpan="6" className="px-6 py-12 text-center text-gray-400 text-sm">
+                      {searchQuery ? `No records matching "${searchQuery}"` : 'No matching attendance records found for today.'}
                     </td>
                   </tr>
                 )}
@@ -345,32 +351,56 @@ export default function Overview() {
         </div>
 
         {/* Right Column (1 Col): Department Breakdown Progress */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-          <div className="mb-6">
-            <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
-              <Building size={20} className="text-blue-600" /> Department Breakdown
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">Today's attendance percentage per group</p>
+        <div className="bg-white rounded-none border border-gray-100 p-6 flex flex-col">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-lg text-gray-900">
+                Department Breakdown
+              </h3>
+            </div>
+
+            {/* Department Search Input */}
+            <div className="relative w-full sm:w-36 shrink-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
+              <input
+                type="text"
+                placeholder="Search dept..."
+                value={deptSearchQuery}
+                onChange={(e) => setDeptSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 bg-gray-50 border border-gray-200 rounded-none text-xs focus:bg-white focus:ring-1 focus:ring-brand-teal focus:border-brand-teal outline-none transition"
+              />
+              {deptSearchQuery && (
+                <button 
+                  onClick={() => setDeptSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                  title="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-5 flex-1">
-            {(summary?.department_summary || []).map((dept, idx) => (
-              <div key={idx} className="space-y-2">
+          <div className="space-y-4 flex-1 max-h-[450px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pr-1">
+            {filteredDepartments.map((dept, idx) => (
+              <div key={idx} className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs font-bold">
-                  <span className="text-gray-800">{dept.department}</span>
-                  <span className="text-brand-teal font-mono">{dept.present} / {dept.total} ({dept.rate}%)</span>
+                  <span className="text-gray-800 truncate pr-2">{dept.department}</span>
+                  <span className="text-brand-teal font-mono shrink-0">{dept.present} / {dept.total} ({dept.rate}%)</span>
                 </div>
-                <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-gray-100 rounded-none overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-brand-navy to-brand-teal rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-brand-navy to-brand-teal rounded-none transition-all duration-500"
                     style={{ width: `${dept.rate}%` }}
                   ></div>
                 </div>
               </div>
             ))}
 
-            {(summary?.department_summary || []).length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-8">No department data available.</p>
+            {filteredDepartments.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-8">
+                {deptSearchQuery ? `No departments matching "${deptSearchQuery}"` : 'No department data available.'}
+              </p>
             )}
           </div>
 

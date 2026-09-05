@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiCall } from '../api';
-import { Lock, User, Eye, EyeOff, ShieldCheck, Camera, ArrowRight, RefreshCw, Sparkles } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ShieldCheck, Camera, ArrowRight, RefreshCw, Sparkles, AlertTriangle } from 'lucide-react';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -9,7 +9,31 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [companyName, setCompanyName] = useState('IdentiFi HR');
+  const [logoUrl, setLogoUrl] = useState('/logo.png');
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const data = await apiCall('/settings/');
+        if (data.companyName) {
+          setCompanyName(data.companyName);
+          document.title = `${data.companyName} Portal`;
+        }
+        if (data.logoUrl) setLogoUrl(data.logoUrl);
+      } catch (err) {
+        const savedName = localStorage.getItem('companyName');
+        const savedLogo = localStorage.getItem('logoUrl');
+        if (savedName) {
+          setCompanyName(savedName);
+          document.title = `${savedName} Portal`;
+        }
+        if (savedLogo) setLogoUrl(savedLogo);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,7 +48,11 @@ export default function Login() {
       if (data.token) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('role', data.role);
-        navigate('/');
+        if (data.role === 'SUPER_ADMIN') {
+          navigate('/super-admin');
+        } else {
+          navigate('/');
+        }
       }
     } catch (err) {
       setError(err.message || 'Authentication failed. Please check credentials.');
@@ -40,119 +68,152 @@ export default function Login() {
   };
 
   return (
-    <div className="w-full min-h-[100dvh] bg-slate-950 text-white flex items-center justify-center p-4 sm:p-6 relative overflow-hidden select-none font-sans">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 sm:p-8 bg-sky-50 font-sans overflow-hidden relative select-none">
       
-      {/* Animated Ambient Glowing Orbs */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-brand-teal/20 rounded-full blur-[120px] pointer-events-none animate-float-slow"></div>
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-brand-blue/20 rounded-full blur-[120px] pointer-events-none animate-float-reverse"></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand-navy/30 rounded-full blur-[150px] pointer-events-none animate-pulse-glow"></div>
-
-      {/* Grid Pattern Overlay */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none"></div>
-
-      {/* Main Login Card */}
-      <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-2xl p-8 sm:p-10 rounded-3xl border border-slate-800/80 shadow-[0_20px_60px_rgba(0,0,0,0.6)] relative z-10 animate-in fade-in zoom-in-95 duration-500">
+      {/* --- Animated Mesh Background (Light Mode) --- */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        {/* Animated Orbs */}
+        <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-brand-teal/20 rounded-full blur-[120px] mix-blend-multiply animate-float"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-brand-blue/20 rounded-full blur-[150px] mix-blend-multiply animate-float-delayed"></div>
+        <div className="absolute top-[20%] left-[30%] w-[40vw] h-[40vw] bg-sky-400/20 rounded-full blur-[100px] mix-blend-multiply animate-pulse-glow"></div>
         
-        {/* Brand Header */}
-        <div className="text-center mb-8 flex flex-col items-center">
-          <div className="relative mb-4 inline-block">
-            <img src="/logo.png" alt="IdentiFi Logo" className="h-24 w-auto object-contain rounded-full drop-shadow-[0_0_15px_rgba(20,184,166,0.3)]" />
-            <div className="absolute top-0 right-0 h-4 w-4 rounded-full bg-emerald-400 border-2 border-slate-900 animate-ping"></div>
-            <div className="absolute top-0 right-0 h-4 w-4 rounded-full bg-emerald-400 border-2 border-slate-900"></div>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
-            IdentiFi <span className="text-brand-teal">HR</span>
-          </h1>
-          <p className="text-xs text-slate-400 font-medium mt-1">Enterprise Facial Attendance Portal</p>
-        </div>
-
-        {/* Error Alert */}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/30 text-red-300 p-3.5 rounded-xl mb-6 text-xs font-semibold animate-in fade-in duration-200 flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Username</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                <User size={18} />
-              </div>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-slate-800/60 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:bg-slate-800 focus:ring-2 focus:ring-brand-teal/30 focus:border-brand-teal outline-none transition duration-200"
-                placeholder="Enter admin username"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Password</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-                <Lock size={18} />
-              </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-10 py-3 bg-slate-800/60 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:bg-slate-800 focus:ring-2 focus:ring-brand-teal/30 focus:border-brand-teal outline-none transition duration-200"
-                placeholder="Enter admin password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full mt-2 bg-brand-teal hover:bg-teal-500 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-brand-teal/20 transition-all duration-200 active:scale-[0.99] flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-          >
-            {loading ? (
-              <><RefreshCw className="animate-spin" size={18} /> Authenticating...</>
-            ) : (
-              <><span>Sign In to Dashboard</span> <ArrowRight size={18} /></>
-            )}
-          </button>
-        </form>
-
-        {/* Quick Autofill & Gate Kiosk Link */}
-        <div className="mt-8 pt-6 border-t border-slate-800/80 flex flex-col gap-3">
-
-          <a
-            href="/gate"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full py-2.5 px-3 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 rounded-xl text-xs text-teal-300 font-semibold transition flex items-center justify-center gap-2"
-          >
-            <Camera size={14} />
-            <span>Open Standalone Gate Terminal</span>
-          </a>
-        </div>
-
-        {/* Footer info */}
-        <div className="mt-6 text-center text-[11px] text-slate-500 flex items-center justify-center gap-1">
-          <ShieldCheck size={14} className="text-brand-teal" />
-          <span>Secured by IdentiFi Biometric Framework</span>
-        </div>
-
+        {/* Light Grid Overlay */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
       </div>
 
+      {/* --- Light Glassmorphic Container --- */}
+      <div className="relative z-10 w-full max-w-6xl rounded-3xl bg-white/40 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_0_rgba(0,0,0,0.08)] flex flex-col lg:flex-row overflow-hidden animate-in zoom-in-95 duration-700">
+        
+        {/* Left Side - Brand & Visuals */}
+        <div className="hidden lg:flex flex-col justify-between w-1/2 p-12 lg:p-16 border-r border-white/60 relative">
+          
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 border border-slate-200 text-brand-teal text-xs font-bold tracking-widest uppercase mb-8 backdrop-blur-md shadow-sm">
+              <Sparkles size={14} className="animate-pulse" />
+              Ultimate Edition
+            </div>
+            <h1 className="text-5xl font-black text-slate-900 leading-[1.1] tracking-tight mb-6">
+              The Future of <br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 to-blue-500">
+                Attendance.
+              </span>
+            </h1>
+            <p className="text-lg text-slate-600 leading-relaxed font-medium max-w-md">
+              Secure, lightning-fast facial recognition powered by deep learning. Welcome to your intelligent workspace.
+            </p>
+          </div>
+
+          <div className="relative z-10 flex items-center gap-5 p-5 rounded-2xl bg-white/60 border border-white/80 backdrop-blur-md mt-12 group hover:bg-white/80 transition-colors shadow-sm">
+            <div className="h-14 w-14 rounded-full bg-gradient-to-tr from-brand-teal to-blue-500 flex items-center justify-center shrink-0 shadow-[0_4px_15px_rgba(14,165,233,0.3)] group-hover:shadow-[0_6px_25px_rgba(14,165,233,0.4)] transition-all">
+              <ShieldCheck size={28} className="text-white" />
+            </div>
+            <div>
+              <p className="text-slate-900 font-bold tracking-wide">Military-Grade Security</p>
+              <p className="text-sm text-slate-500 mt-1 font-medium">Encrypted biometric processing</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side - Form */}
+        <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-16 flex flex-col justify-center relative bg-white/20">
+          
+          <div className="w-full max-w-md mx-auto">
+            {/* Dynamic Logo & Name */}
+            <div className="text-center mb-10">
+              <div className="inline-block relative mb-6 group">
+                <div className="absolute inset-0 bg-brand-teal/20 blur-2xl rounded-full scale-110 group-hover:scale-150 transition-transform duration-700 opacity-60"></div>
+                <img 
+                  src={logoUrl} 
+                  alt="Company Logo" 
+                  className="h-24 w-auto object-contain relative z-10 drop-shadow-sm"
+                />
+              </div>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-2">
+                {companyName}
+              </h2>
+              <p className="text-slate-500 font-medium">Please sign in to continue</p>
+            </div>
+
+            {/* Error Alert */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl mb-8 text-sm font-medium animate-in slide-in-from-top-2 duration-300 flex items-center gap-3 shadow-sm">
+                <AlertTriangle size={18} className="shrink-0 text-red-500" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Username</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-brand-teal transition-colors">
+                    <User size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full pl-11 pr-4 py-4 bg-white/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-4 focus:ring-brand-teal/20 focus:border-brand-teal outline-none transition-all duration-300 shadow-sm"
+                    placeholder="Enter admin username"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-brand-teal transition-colors">
+                    <Lock size={18} />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-11 pr-12 py-4 bg-white/70 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-4 focus:ring-brand-teal/20 focus:border-brand-teal outline-none transition-all duration-300 shadow-sm"
+                    placeholder="Enter admin password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full mt-4 bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {loading ? (
+                  <><RefreshCw className="animate-spin" size={20} /> Authenticating...</>
+                ) : (
+                  <>Sign In to Dashboard <ArrowRight size={20} /></>
+                )}
+              </button>
+            </form>
+
+            {/* Quick Actions */}
+            <div className="mt-10 pt-8 border-t border-slate-200/60">
+              <a
+                href="/gate"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-4 px-4 bg-white/60 hover:bg-white border border-slate-200 rounded-xl text-sm text-slate-600 hover:text-slate-900 font-semibold transition-all shadow-sm flex items-center justify-center gap-2 group"
+              >
+                <Camera size={18} className="text-brand-teal group-hover:scale-110 transition-transform" />
+                <span>Open Standalone Gate Terminal</span>
+              </a>
+            </div>
+
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

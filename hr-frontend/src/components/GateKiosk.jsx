@@ -209,8 +209,17 @@ export default function GateKiosk() {
       if (data.status === 'success' && facesList.length > 0) {
         const first = facesList[0];
         if (first.name && first.name !== 'unknown') {
-          const displayName = first.name;
+          let displayName = first.name;
           const empId = first.employee_id || '';
+
+          if (empId && displayName.startsWith(empId)) {
+            displayName = displayName.substring(empId.length).replace(/^[_ -]+/, '').replace(/_/g, ' ').trim() || displayName;
+          } else if (displayName.startsWith('EMP_') || displayName.startsWith('EMP-')) {
+            const parts = displayName.split('_');
+            if (parts.length >= 3) {
+              displayName = parts.slice(2).join(' ');
+            }
+          }
 
           setRecognitionResult({
             type: 'prompt',
@@ -438,9 +447,7 @@ export default function GateKiosk() {
                        Today: Check-in {recognitionResult.todayStatus.checkin}
                        {recognitionResult.todayStatus.checkout ? ` | Check-out ${recognitionResult.todayStatus.checkout}` : ''}
                      </div>
-                   ) : (
-                     <div className="text-2xl font-semibold text-white/50 drop-shadow-lg mb-10">Not checked in today</div>
-                   )}
+                   ) : null}
 
                    {recognitionResult.todayStatus?.checkout ? (
                      <div className="text-3xl md:text-4xl font-bold text-green-400 drop-shadow-2xl flex items-center justify-center gap-4">

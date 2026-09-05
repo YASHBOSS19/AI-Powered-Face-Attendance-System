@@ -33,3 +33,11 @@ backend/dataset/
 .env
 .env.local
 .env.production
+
+# Static Logo folder
+backend/static/logo/
+backend/static/logos/
+hr-frontend/public/logo/
+hr-frontend/public/logos/
+static/logo/
+static/logos/

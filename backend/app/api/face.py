@@ -82,26 +82,54 @@ async def recognize(data: RecognizeRequest):
         emp_id = None
         
         if name != "unknown":
-            parts = name.split("_", 1)
-            emp_id = parts[0] if len(parts) > 1 else None
+            raw_matched_name = name
+            emp_id = None
             
             # Fetch the actual updated name from the MySQL DB
             with get_db_context() as conn:
                 cursor = conn.cursor(dictionary=True)
                 
-                # If embedding didn't have an ID prefix, look it up
-                if not emp_id:
-                    cursor.execute("SELECT employee_id FROM face_embeddings WHERE embedding_name = %s", (name,))
-                    emb_row = cursor.fetchone()
-                    if emb_row:
-                        emp_id = emb_row["employee_id"]
+                # 1. First check if exact embedding_name exists in face_embeddings
+                cursor.execute("SELECT employee_id FROM face_embeddings WHERE embedding_name = %s", (raw_matched_name,))
+                emb_row = cursor.fetchone()
+                if emb_row:
+                    emp_id = emb_row["employee_id"]
 
-                # Use actual name from employees table, stripping prefix entirely
+                # 2. If not found, match by employee_id prefix from employees table
+                if not emp_id:
+                    cursor.execute("SELECT employee_id, name FROM employees WHERE %s LIKE CONCAT(employee_id, '%%') ORDER BY LENGTH(employee_id) DESC LIMIT 1", (raw_matched_name,))
+                    emp_row = cursor.fetchone()
+                    if emp_row:
+                        emp_id = emp_row["employee_id"]
+                        name = emp_row["name"]
+
+                # 3. Fallback regex to capture EMP_123 or EMP123
+                if not emp_id:
+                    import re
+                    match = re.match(r'^(EMP[_-]?\d+)', raw_matched_name, re.IGNORECASE)
+                    if match:
+                        emp_id = match.group(1)
+
+                # 4. If emp_id is found, query the official employee name
                 if emp_id:
                     cursor.execute("SELECT name FROM employees WHERE employee_id = %s", (emp_id,))
                     row = cursor.fetchone()
                     if row:
                         name = row["name"]
+                    elif raw_matched_name.startswith(emp_id):
+                        clean_n = raw_matched_name[len(emp_id):].lstrip('_ ').replace('_', ' ').strip()
+                        if clean_n:
+                            name = clean_n
+                else:
+                    # Fallback pattern for EMP_114_Harshitchhipa
+                    if "_" in raw_matched_name:
+                        parts = raw_matched_name.split("_")
+                        if len(parts) >= 3 and parts[0] == "EMP":
+                            emp_id = f"{parts[0]}_{parts[1]}"
+                            name = " ".join(parts[2:])
+                        elif len(parts) >= 2:
+                            emp_id = parts[0]
+                            name = " ".join(parts[1:])
                         
             today_info = get_today_status(name=name, employee_id=emp_id)
             status = today_info["status"] or "matched"

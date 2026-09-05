@@ -1,15 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-navy: #2c3e50;
-  --color-brand-dark: #1a2530;
-  --color-brand-teal: #1abc9c;
-  --color-brand-blue: #3498db;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --color-brand-navy: #1a4751;
+  --color-brand-dark: #113038;
+  --color-brand-teal: #21c4c9;
+  --color-brand-blue: #358c97;
 }
 
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900;
+    font-family: 'Inter', sans-serif !important;
   }
 }
 
@@ -38,6 +40,15 @@
 
 .animate-pulse-glow {
   animation: pulse-glow 4s ease-in-out infinite;
+}
+
+@keyframes marquee {
+  0% { left: 100%; transform: translateX(0); }
+  100% { left: 0; transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  animation: marquee 10s linear infinite;
 }
 
 /* 3D Flip Animation Classes */

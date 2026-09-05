@@ -6,7 +6,8 @@ import os
 from app.core.embedding_db import init_db as init_embed_db
 from app.core.attendance_db import init_db as init_att_db
 from app.core.ws_manager import manager
-from app.api import auth, employees, face, attendance
+from app.api import auth, employees, face, attendance, settings, super_admin
+from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,11 +38,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount Static Files (ensure directory exists)
+import os
+os.makedirs("static", exist_ok=True)
+app.mount("/api/static", StaticFiles(directory="static"), name="static")
+
 # Mount Routers
 app.include_router(auth.router)
 app.include_router(employees.router)
 app.include_router(face.router)
 app.include_router(attendance.router)
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(super_admin.router)
 
 @app.websocket("/ws/attendance")
 async def websocket_attendance(websocket: WebSocket):

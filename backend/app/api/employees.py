@@ -58,7 +58,7 @@ def list_employees(db: mysql_conn.CMySQLConnection = Depends(get_db)):
     cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT e.employee_id, e.name, e.domain, e.department, e.position, 
-               f.embedding_name
+               e.email, e.phone, e.custom_fields, e.registered_date, f.embedding_name
         FROM employees e
         LEFT JOIN face_embeddings f ON e.employee_id = f.employee_id
     """)
@@ -72,6 +72,10 @@ def list_employees(db: mysql_conn.CMySQLConnection = Depends(get_db)):
             "domain": row["domain"],
             "department": row["department"],
             "position": row["position"],
+            "email": row["email"],
+            "phone": row["phone"],
+            "custom_fields": json.loads(row["custom_fields"]) if row["custom_fields"] else None,
+            "registered_date": str(row["registered_date"]) if row["registered_date"] else None,
             "embedding_name": row["embedding_name"]
         })
         
@@ -80,10 +84,12 @@ def list_employees(db: mysql_conn.CMySQLConnection = Depends(get_db)):
 def register_employee(data: EmployeeRegistration, db: mysql_conn.CMySQLConnection = Depends(get_db)):
     cursor = db.cursor()
     try:
+        custom_fields_json = json.dumps(data.custom_fields) if data.custom_fields else None
+
         cursor.execute("""
-            INSERT INTO employees (employee_id, name, domain, department, position)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (data.employee_id, data.name, data.domain, data.department, data.position))
+            INSERT INTO employees (employee_id, name, domain, department, position, email, phone, custom_fields)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (data.employee_id, data.name, data.domain, data.department, data.position, data.email, data.phone, custom_fields_json))
         db.commit()
         return {"status": "success", "message": "Employee registered successfully"}
     except mysql.connector.errors.IntegrityError:
@@ -130,6 +136,8 @@ def bulk_upload(
     success_count = 0
     skipped_count = 0
 
+    mapped_csv_headers = set(v for k, v in col_mapping.items() if v and isinstance(v, str))
+
     for row in csv_reader:
         # Extract values using mapping, default to empty string if not mapped or missing
         emp_id_col = col_mapping.get('employee_id')
@@ -150,11 +158,21 @@ def bulk_upload(
         department = row.get(col_mapping.get('department', ''), "").strip()
         position = row.get(col_mapping.get('position', ''), "").strip()
 
+        # Capture remaining columns as custom fields
+        custom_fields_dict = {}
+        for csv_header, value in row.items():
+            if csv_header and csv_header not in mapped_csv_headers:
+                val = value.strip() if value else ""
+                if val:
+                    custom_fields_dict[csv_header] = val
+
+        custom_fields_json = json.dumps(custom_fields_dict) if custom_fields_dict else None
+
         try:
             cursor.execute("""
-                INSERT INTO employees (employee_id, name, domain, department, position)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (emp_id, name, domain, department, position))
+                INSERT INTO employees (employee_id, name, domain, department, position, custom_fields)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (emp_id, name, domain, department, position, custom_fields_json))
             success_count += 1
         except mysql.connector.errors.IntegrityError:
             # Skip duplicates
@@ -220,25 +238,36 @@ async def sql_upload(
         "skipped_count": skipped_count
     }
 
+from typing import Optional, Dict
+
 class EmployeeUpdateRequest(BaseModel):
     name: str
     domain: str
     department: str
     position: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    custom_fields: Optional[Dict[str, str]] = None
 
 @router.put("/{employee_id}")
 def update_employee(employee_id: str, data: EmployeeUpdateRequest, db: mysql_conn.CMySQLConnection = Depends(get_db)):
     cursor = db.cursor()
+
+    # First check if employee exists
+    cursor.execute("SELECT employee_id FROM employees WHERE employee_id = %s", (employee_id,))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    custom_fields_json = json.dumps(data.custom_fields) if data.custom_fields else None
+
     cursor.execute("""
         UPDATE employees 
-        SET name = %s, domain = %s, department = %s, position = %s
+        SET name = %s, domain = %s, department = %s, position = %s, email = %s, phone = %s, custom_fields = %s
         WHERE employee_id = %s
-    """, (data.name, data.domain, data.department, data.position, employee_id))
+    """, (data.name, data.domain, data.department, data.position, data.email, data.phone, custom_fields_json, employee_id))
     db.commit()
     
-    if cursor.rowcount > 0:
-        return {"status": "success", "message": "Employee updated successfully"}
-    raise HTTPException(status_code=404, detail="Employee not found")
+    return {"status": "success", "message": "Employee updated successfully"}
 
 @router.delete("/{employee_id}")
 def delete_employee(employee_id: str, db: mysql_conn.CMySQLConnection = Depends(get_db)):
