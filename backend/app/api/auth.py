@@ -10,13 +10,21 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/login")
 def login(request: LoginRequest, db: MySQLConnection = Depends(get_db)):
     cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, username, password_hash, role FROM hr_users WHERE username = %s", (request.username,))
+    cursor.execute("SELECT id, username, password_hash, role, status FROM hr_users WHERE username = %s", (request.username,))
     user = cursor.fetchone()
+
+    # Check if user exists
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    # Check if account is disabled
+    if user.get("status") == "disabled":
+        raise HTTPException(status_code=403, detail="Your account has been disabled by the Super Admin. Access denied.")
 
     # Allow default admin credentials for convenience
     if request.username == "admin" and request.password in ["admin123", "password123", "admin"]:
-        user_id = user["id"] if user else 1
-        role = user["role"] if user else "HR"
+        user_id = user["id"]
+        role = user["role"]
         token = create_access_token(data={"user_id": user_id, "role": role})
         return {
             "status": "success",
@@ -24,9 +32,6 @@ def login(request: LoginRequest, db: MySQLConnection = Depends(get_db)):
             "role": role
         }
 
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-        
     user_id = user["id"]
     db_password_hash = user["password_hash"]
     role = user["role"]

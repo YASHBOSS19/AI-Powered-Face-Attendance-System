@@ -40,7 +40,9 @@ export const apiCall = async (endpoint, options = {}) => {
   if (response.status === 401) {
     // Token expired or unauthorized
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
     throw new Error('Unauthorized');
   }
 

@@ -7,20 +7,7 @@ def init_db():
     with get_db_context() as conn:
         cursor = conn.cursor()
         
-        # Create employees table first
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS employees (
-                employee_id VARCHAR(255) PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                domain VARCHAR(255) NOT NULL,
-                position VARCHAR(255),
-                department VARCHAR(255),
-                registered_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                face_embedding_id INT UNIQUE
-            )
-        """)
-        
-        # Create hr_users table
+        # Create hr_users table first if it doesn't exist
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS hr_users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -30,26 +17,47 @@ def init_db():
             )
         """)
 
+        # Create employees table with composite primary key
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS employees (
+                employee_id VARCHAR(255),
+                hr_user_id INT DEFAULT 1,
+                name VARCHAR(255) NOT NULL,
+                domain VARCHAR(255) NOT NULL,
+                position VARCHAR(255),
+                department VARCHAR(255),
+                email VARCHAR(255),
+                phone VARCHAR(255),
+                custom_fields JSON,
+                registered_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (employee_id, hr_user_id)
+            )
+        """)
+
         # Create face_embeddings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS face_embeddings (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 employee_id VARCHAR(255) NOT NULL,
+                hr_user_id INT DEFAULT 1,
                 embedding_name VARCHAR(255) NOT NULL,
-                FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+                FOREIGN KEY (employee_id, hr_user_id) REFERENCES employees(employee_id, hr_user_id) ON DELETE CASCADE
             )
         """)
+        
+        # Create attendance table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS attendance (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 employee_id VARCHAR(255) NOT NULL,
+                hr_user_id INT DEFAULT 1,
                 name VARCHAR(255) NOT NULL,
                 domain VARCHAR(255) NOT NULL,
                 date VARCHAR(255) NOT NULL,
                 checkin VARCHAR(255),
                 checkout VARCHAR(255),
                 status ENUM('present', 'late', 'absent'),
-                FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+                FOREIGN KEY (employee_id, hr_user_id) REFERENCES employees(employee_id, hr_user_id) ON DELETE CASCADE
             )
         """)
         
@@ -57,15 +65,15 @@ def init_db():
         try:
             cursor.execute("""
                 CREATE INDEX idx_attendance_employee 
-                ON attendance(employee_id)
+                ON attendance(employee_id, hr_user_id)
             """)
         except Exception:
-            pass # Index might already exist, MySQL handles IF NOT EXISTS differently for indexes
+            pass
         
         conn.commit()
 
 
-def get_today_status(name, employee_id=None):
+def get_today_status(name, hr_user_id, employee_id=None):
     """Get today's attendance status for an employee"""
     today_str = date.today().strftime("%Y-%m-%d")
     with get_db_context() as conn:
@@ -75,13 +83,13 @@ def get_today_status(name, employee_id=None):
         if employee_id:
             cursor.execute("""
                 SELECT id, checkin, checkout, status FROM attendance
-                WHERE (employee_id = %s OR name = %s) AND date = %s
-            """, (employee_id, name, today_str))
+                WHERE (employee_id = %s OR name = %s) AND hr_user_id = %s AND date = %s
+            """, (employee_id, name, hr_user_id, today_str))
         else:
             cursor.execute("""
                 SELECT id, checkin, checkout, status FROM attendance
-                WHERE name = %s AND date = %s
-            """, (name, today_str))
+                WHERE name = %s AND hr_user_id = %s AND date = %s
+            """, (name, hr_user_id, today_str))
             
         row = cursor.fetchone()
         if row:
@@ -99,7 +107,7 @@ def get_today_status(name, employee_id=None):
         }
 
 
-def record_checkin(name, employee_id=None):
+def record_checkin(name, hr_user_id, employee_id=None):
     """Perform check-in for an employee"""
     today_str = date.today().strftime("%Y-%m-%d")
     now_time_str = datetime.now().strftime("%H:%M:%S")
@@ -112,12 +120,12 @@ def record_checkin(name, employee_id=None):
 
         domain = 'Unknown'
         if employee_id:
-            cursor.execute("SELECT domain FROM employees WHERE employee_id = %s", (employee_id,))
+            cursor.execute("SELECT domain FROM employees WHERE employee_id = %s AND hr_user_id = %s", (employee_id, hr_user_id))
             res = cursor.fetchone()
             if res:
                 domain = res[0]
 
-        existing = get_today_status(name, employee_id)
+        existing = get_today_status(name, hr_user_id, employee_id)
         if existing["has_record"]:
             return {
                 "success": True,
@@ -129,10 +137,11 @@ def record_checkin(name, employee_id=None):
             }
 
         cursor.execute("""
-            INSERT INTO attendance (employee_id, name, domain, date, checkin, status)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO attendance (employee_id, hr_user_id, name, domain, date, checkin, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (
             employee_id if employee_id else name,
+            hr_user_id,
             name,
             domain,
             today_str,
@@ -150,7 +159,7 @@ def record_checkin(name, employee_id=None):
         }
 
 
-def record_checkout(name, employee_id=None):
+def record_checkout(name, hr_user_id, employee_id=None):
     """Perform check-out for an employee"""
     today_str = date.today().strftime("%Y-%m-%d")
     now_time_str = datetime.now().strftime("%H:%M:%S")
@@ -161,17 +170,17 @@ def record_checkout(name, employee_id=None):
 
         domain = 'Unknown'
         if employee_id:
-            cursor.execute("SELECT domain FROM employees WHERE employee_id = %s", (employee_id,))
+            cursor.execute("SELECT domain FROM employees WHERE employee_id = %s AND hr_user_id = %s", (employee_id, hr_user_id))
             res = cursor.fetchone()
             if res:
                 domain = res[0]
 
-        existing = get_today_status(name, employee_id)
+        existing = get_today_status(name, hr_user_id, employee_id)
         if existing["has_record"]:
             cursor.execute("""
                 UPDATE attendance SET checkout = %s
-                WHERE (employee_id = %s OR name = %s) AND date = %s
-            """, (now_time_str, employee_id if employee_id else name, name, today_str))
+                WHERE (employee_id = %s OR name = %s) AND hr_user_id = %s AND date = %s
+            """, (now_time_str, employee_id if employee_id else name, name, hr_user_id, today_str))
             conn.commit()
             return {
                 "success": True,
@@ -184,10 +193,11 @@ def record_checkout(name, employee_id=None):
             current_hour = datetime.now().hour
             status = 'present' if current_hour < 10 else 'late'
             cursor.execute("""
-                INSERT INTO attendance (employee_id, name, domain, date, checkin, checkout, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO attendance (employee_id, hr_user_id, name, domain, date, checkin, checkout, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 employee_id if employee_id else name,
+                hr_user_id,
                 name,
                 domain,
                 today_str,
@@ -205,15 +215,15 @@ def record_checkout(name, employee_id=None):
             }
 
 
-def mark_attendance(name, employee_id=None):
+def mark_attendance(name, hr_user_id, employee_id=None):
     """
     Mark attendance for an employee (legacy helper)
     """
-    res = record_checkin(name, employee_id)
+    res = record_checkin(name, hr_user_id, employee_id)
     return not res.get("already_checked_in", False)
 
 
-def auto_mark_absent():
+def auto_mark_absent(hr_user_id):
     """Mark attendance as 'absent' for past dates if checkout is missing."""
     today_str = date.today().strftime("%Y-%m-%d")
     with get_db_context() as conn:
@@ -221,25 +231,17 @@ def auto_mark_absent():
         cursor.execute("""
             UPDATE attendance 
             SET status = 'absent' 
-            WHERE checkout IS NULL AND date < %s AND status != 'absent'
-        """, (today_str,))
+            WHERE checkout IS NULL AND date < %s AND status != 'absent' AND hr_user_id = %s
+        """, (today_str, hr_user_id))
         conn.commit()
 
-def get_attendance_report(date_from=None, date_to=None):
-    """
-    Generate attendance report between dates
-    Args:
-        date_from: Start date (YYYY-MM-DD)
-        date_to: End date (YYYY-MM-DD)
-    Returns:
-        List of attendance records with employee details
-    """
+def get_attendance_report(hr_user_id, date_from=None, date_to=None):
     if not date_from:
         date_from = date.today().replace(day=1).strftime("%Y-%m-%d")
     if not date_to:
         date_to = date.today().strftime("%Y-%m-%d")
         
-    auto_mark_absent()
+    auto_mark_absent(hr_user_id)
         
     with get_db_context() as conn:
         cursor = conn.cursor(dictionary=True)
@@ -255,17 +257,15 @@ def get_attendance_report(date_from=None, date_to=None):
                 SUM(CASE WHEN a.status = 'absent' THEN 1 ELSE 0 END) AS days_absent
             FROM employees e
             LEFT JOIN attendance a ON (e.employee_id = a.employee_id OR e.name = a.name)
-                AND a.date BETWEEN %s AND %s
+                AND a.date BETWEEN %s AND %s AND a.hr_user_id = %s
+            WHERE e.hr_user_id = %s
             GROUP BY e.employee_id
             ORDER BY e.department, e.name
-        """, (date_from, date_to))
+        """, (date_from, date_to, hr_user_id, hr_user_id))
         
         return [dict(row) for row in cursor.fetchall()]
 
-def get_employee_attendance(employee_id=None, name=None, date_from=None, date_to=None):
-    """
-    Get detailed attendance for a specific employee
-    """
+def get_employee_attendance(hr_user_id, employee_id=None, name=None, date_from=None, date_to=None):
     with get_db_context() as conn:
         cursor = conn.cursor(dictionary=True)
         
@@ -280,9 +280,9 @@ def get_employee_attendance(employee_id=None, name=None, date_from=None, date_to
                 checkout,
                 status
             FROM attendance
-            WHERE 1=1
+            WHERE hr_user_id = %s
         """
-        params = []
+        params = [hr_user_id]
         
         if employee_id and name:
             query += " AND (employee_id = %s OR name = %s)"
@@ -309,19 +309,14 @@ def get_employee_attendance(employee_id=None, name=None, date_from=None, date_to
         cursor.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
-def get_today_attendance_summary():
-    """
-    Get today's overall attendance statistics, employee records, and department breakdown
-    """
+def get_today_attendance_summary(hr_user_id):
     today_str = date.today().strftime("%Y-%m-%d")
     with get_db_context() as conn:
         cursor = conn.cursor(dictionary=True)
 
-        # Total employees count
-        cursor.execute("SELECT COUNT(*) as count FROM employees")
+        cursor.execute("SELECT COUNT(*) as count FROM employees WHERE hr_user_id = %s", (hr_user_id,))
         total_employees = cursor.fetchone()["count"]
 
-        # Today's attendance records
         cursor.execute("""
             SELECT 
                 a.id,
@@ -335,26 +330,25 @@ def get_today_attendance_summary():
                 COALESCE(e.department, e.domain, 'General') AS department,
                 e.position
             FROM attendance a
-            LEFT JOIN employees e ON (a.employee_id = e.employee_id OR a.name = e.name)
-            WHERE a.date = %s
+            LEFT JOIN employees e ON (a.employee_id = e.employee_id OR a.name = e.name) AND e.hr_user_id = %s
+            WHERE a.date = %s AND a.hr_user_id = %s
             ORDER BY a.checkin DESC
-        """, (today_str,))
+        """, (hr_user_id, today_str, hr_user_id))
         today_records = [dict(row) for row in cursor.fetchall()]
 
-        # Calculate KPI stats
         present_today = len(today_records)
         on_time_count = sum(1 for r in today_records if r["status"] == "present")
         late_count = sum(1 for r in today_records if r["status"] == "late")
         absent_count = max(0, total_employees - present_today)
 
-        # Department breakdown
         cursor.execute("""
             SELECT 
                 COALESCE(department, domain, 'General') AS dept_name,
                 COUNT(DISTINCT employee_id) AS total_emp
             FROM employees
+            WHERE hr_user_id = %s
             GROUP BY dept_name
-        """)
+        """, (hr_user_id,))
         dept_rows = cursor.fetchall()
 
         dept_summary = []
@@ -380,22 +374,20 @@ def get_today_attendance_summary():
             "department_summary": dept_summary
         }
 
-def update_attendance(record_id, checkin, checkout, status):
-    """Manually update an attendance record"""
+def update_attendance(record_id, hr_user_id, checkin, checkout, status):
     with get_db_context() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE attendance 
             SET checkin = %s, checkout = %s, status = %s
-            WHERE id = %s
-        """, (checkin, checkout, status, record_id))
+            WHERE id = %s AND hr_user_id = %s
+        """, (checkin, checkout, status, record_id, hr_user_id))
         conn.commit()
         return cursor.rowcount > 0
 
-def delete_attendance(record_id):
-    """Manually delete an attendance record"""
+def delete_attendance(record_id, hr_user_id):
     with get_db_context() as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM attendance WHERE id = %s", (record_id,))
+        cursor.execute("DELETE FROM attendance WHERE id = %s AND hr_user_id = %s", (record_id, hr_user_id))
         conn.commit()
         return cursor.rowcount > 0

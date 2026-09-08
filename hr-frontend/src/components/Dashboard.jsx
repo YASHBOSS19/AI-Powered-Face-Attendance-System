@@ -15,13 +15,19 @@ export default function Dashboard() {
   const loadSettings = async () => {
     try {
       const data = await apiCall('/settings/');
-      if (data.companyName) setCompanyName(data.companyName);
+      if (data.companyName) {
+        setCompanyName(data.companyName);
+        document.title = `${data.companyName} Portal`;
+      }
       if (data.logoUrl) setLogoUrl(data.logoUrl);
     } catch (err) {
       console.error("Failed to load settings:", err);
       const savedName = localStorage.getItem('companyName');
       const savedLogo = localStorage.getItem('logoUrl');
-      if (savedName) setCompanyName(savedName);
+      if (savedName) {
+        setCompanyName(savedName);
+        document.title = `${savedName} Portal`;
+      }
       if (savedLogo) setLogoUrl(savedLogo);
     }
   };
@@ -30,8 +36,11 @@ export default function Dashboard() {
     loadSettings();
     const handleSettingsUpdate = (e) => {
       if (e.detail) {
-        setCompanyName(e.detail.companyName);
-        setLogoUrl(e.detail.logoUrl);
+        if (e.detail.companyName) {
+          setCompanyName(e.detail.companyName);
+          document.title = `${e.detail.companyName} Portal`;
+        }
+        if (e.detail.logoUrl) setLogoUrl(e.detail.logoUrl);
       } else {
         loadSettings();
       }

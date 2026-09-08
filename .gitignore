@@ -41,3 +41,7 @@ hr-frontend/public/logo/
 hr-frontend/public/logos/
 static/logo/
 static/logos/
+
+# Runtime Tenant Settings
+settings_*.json
+backend/settings_*.json

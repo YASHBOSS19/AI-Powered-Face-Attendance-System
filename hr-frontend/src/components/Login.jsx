@@ -9,30 +9,12 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [companyName, setCompanyName] = useState('IdentiFi HR');
-  const [logoUrl, setLogoUrl] = useState('/logo.png');
+  const [companyName] = useState('IdentiFi');
+  const [logoUrl] = useState('/logo.png');
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const data = await apiCall('/settings/');
-        if (data.companyName) {
-          setCompanyName(data.companyName);
-          document.title = `${data.companyName} Portal`;
-        }
-        if (data.logoUrl) setLogoUrl(data.logoUrl);
-      } catch (err) {
-        const savedName = localStorage.getItem('companyName');
-        const savedLogo = localStorage.getItem('logoUrl');
-        if (savedName) {
-          setCompanyName(savedName);
-          document.title = `${savedName} Portal`;
-        }
-        if (savedLogo) setLogoUrl(savedLogo);
-      }
-    };
-    fetchSettings();
+    document.title = 'IdentiFi - Sign In';
   }, []);
 
   const handleLogin = async (e) => {

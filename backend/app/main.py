@@ -67,6 +67,4 @@ async def websocket_attendance(websocket: WebSocket):
 def root():
     return {"message": "Welcome to the FastAPI HR Backend!"}
 
-# Uvicorn WebSocket auto-reload trigger
-
-
+# Uvicorn auto-reload trigger
