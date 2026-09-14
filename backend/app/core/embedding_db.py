@@ -1,50 +1,43 @@
-import os
-import pickle
+import json
 import numpy as np
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from app.db.models import SavedEmbedding
 
-EMBED_PATH = "embeddings.pkl"
-embedding_db = {}  # hr_user_id (int) -> name (str) -> list of embeddings
+async def add_embedding(db: AsyncSession, hr_user_id: int, name: str, emb):
+    vector_json = emb.tolist()
+    new_embedding = SavedEmbedding(
+        hr_user_id=hr_user_id,
+        embedding_name=name,
+        embedding_vector=vector_json
+    )
+    db.add(new_embedding)
+    await db.commit()
 
-def init_db():
-    global embedding_db
-    if os.path.exists(EMBED_PATH):
-        with open(EMBED_PATH, "rb") as f:
-            data = pickle.load(f)
-            # Migration check: if old data (keys are strings like names), nest it under hr_user_id=1
-            if data and isinstance(list(data.keys())[0], str):
-                embedding_db = {1: data}
-                save_db()
-            else:
-                embedding_db = data
-    else:
-        embedding_db = {}
-
-def save_db():
-    with open(EMBED_PATH, "wb") as f:
-        pickle.dump(embedding_db, f)
-
-def add_embedding(hr_user_id, name, emb):
-    if hr_user_id not in embedding_db:
-        embedding_db[hr_user_id] = {}
-    if name not in embedding_db[hr_user_id]:
-        embedding_db[hr_user_id][name] = []
-    embedding_db[hr_user_id][name].append(emb)
-    save_db()
-
-def match_embedding(hr_user_id, emb, threshold=0.35):
+async def match_embedding(db: AsyncSession, hr_user_id: int, emb, threshold=0.35):
     best_name = "unknown"
     best_score = -1
 
-    if hr_user_id not in embedding_db:
-        return "unknown", -1
-
-    for name, vectors in embedding_db[hr_user_id].items():
-        for ref in vectors:
-            sim = np.dot(emb, ref)
-            if sim > best_score:
-                best_score = sim
-                best_name = name
+    query = select(SavedEmbedding).where(SavedEmbedding.hr_user_id == hr_user_id)
+    result = await db.execute(query)
+    rows = result.scalars().all()
+    
+    for row in rows:
+        name = row.embedding_name
+        vector_json = row.embedding_vector
+        
+        if isinstance(vector_json, str):
+            vector_list = json.loads(vector_json)
+        else:
+            vector_list = vector_json  # Some drivers auto-deserialize JSON
+            
+        ref_emb = np.array(vector_list, dtype=np.float32)
+        
+        sim = np.dot(emb, ref_emb)
+        if sim > best_score:
+            best_score = sim
+            best_name = name
 
     if best_score < threshold:
-        return "unknown", best_score
-    return best_name, best_score
+        return "unknown", float(best_score)
+    return best_name, float(best_score)

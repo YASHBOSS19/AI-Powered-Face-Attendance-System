@@ -445,7 +445,12 @@ export default function Settings() {
                     <input
                       type="tel"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9+\-() ]/g, '');
+                        if (val.length <= 20) {
+                          setPhone(val);
+                        }
+                      }}
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-sm text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal outline-none transition-all shadow-xs"
                       placeholder="+91 98765 43210"
                     />

@@ -3,7 +3,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
 
-SECRET_KEY = 'your_secret_key'
+import os
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "your_secret_key")
 ALGORITHM = "HS256"
 
 security = HTTPBearer()

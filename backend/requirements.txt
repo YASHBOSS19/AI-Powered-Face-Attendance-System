@@ -1,4 +1,4 @@
-﻿annotated-doc==0.0.5
+annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
 blinker==1.9.0
@@ -55,3 +55,8 @@ urllib3==2.7.0
 uvicorn==0.52.1
 websockets==17.0.1
 Werkzeug==3.1.8
+sqlalchemy>=2.0.0
+aiomysql
+alembic
+greenlet
+cryptography

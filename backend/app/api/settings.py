@@ -4,7 +4,12 @@ import shutil
 import uuid
 from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Depends
 from werkzeug.security import generate_password_hash
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import update
 
+from app.db.database import get_db
+from app.db.models import HRUser
 from app.core.security import get_current_user
 
 router = APIRouter()
@@ -51,34 +56,31 @@ def save_settings_data(hr_user_id: int, data: dict):
     with open(settings_file, "w") as f:
         json.dump(data, f, indent=2)
 
-from app.db.database import get_db
-from mysql.connector.connection import MySQLConnection
-
 @router.get("/")
-async def get_settings(hr_user_id: int = Depends(get_current_user), db: MySQLConnection = Depends(get_db)):
+async def get_settings(hr_user_id: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     settings_data = get_settings_data(hr_user_id)
     
-    # Also fetch user record from MySQL
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("SELECT id, username, email, phone, full_name, role, status, created_at, last_login FROM hr_users WHERE id = %s", (hr_user_id,))
-    user_row = cursor.fetchone()
+    # Fetch user record from MySQL
+    query = select(HRUser).where(HRUser.id == hr_user_id)
+    result = await db.execute(query)
+    user_row = result.scalars().first()
     
     if user_row:
-        settings_data["username"] = user_row["username"]
-        if user_row.get("email"):
-            settings_data["email"] = user_row["email"]
-        if user_row.get("phone"):
-            settings_data["phone"] = user_row["phone"]
-        settings_data["role"] = user_row.get("role", "HR")
-        settings_data["status"] = user_row.get("status", "active")
-        settings_data["createdAt"] = str(user_row["created_at"]) if user_row.get("created_at") else ""
+        settings_data["username"] = user_row.username
+        if user_row.email:
+            settings_data["email"] = user_row.email
+        if user_row.phone:
+            settings_data["phone"] = user_row.phone
+        settings_data["role"] = user_row.role or "HR"
+        settings_data["status"] = user_row.status or "active"
+        settings_data["createdAt"] = str(user_row.created_at) if user_row.created_at else ""
         if not settings_data.get("companyName"):
-            settings_data["companyName"] = user_row.get("full_name") or "My Company"
+            settings_data["companyName"] = user_row.full_name or "My Company"
             
     return settings_data
 
 @router.post("/")
-async def update_settings(request: Request, hr_user_id: int = Depends(get_current_user), db: MySQLConnection = Depends(get_db)):
+async def update_settings(request: Request, hr_user_id: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     data = await request.json()
     current_settings = get_settings_data(hr_user_id)
     
@@ -104,27 +106,23 @@ async def update_settings(request: Request, hr_user_id: int = Depends(get_curren
     
     # Sync DB fields (full_name, email, phone, password_hash)
     try:
-        cursor = db.cursor()
-        update_cols = []
-        params = []
-        if "companyName" in data and data["companyName"]:
-            update_cols.append("full_name = %s")
-            params.append(data["companyName"])
-        if "email" in data and data["email"] is not None:
-            update_cols.append("email = %s")
-            params.append(data["email"])
-        if "phone" in data and data["phone"] is not None:
-            update_cols.append("phone = %s")
-            params.append(data["phone"])
-        if "new_password" in data and data["new_password"]:
-            update_cols.append("password_hash = %s")
-            params.append(generate_password_hash(data["new_password"]))
-            
-        if update_cols:
-            params.append(hr_user_id)
-            cursor.execute(f"UPDATE hr_users SET {', '.join(update_cols)} WHERE id = %s", tuple(params))
-            db.commit()
+        query = select(HRUser).where(HRUser.id == hr_user_id)
+        result = await db.execute(query)
+        user_row = result.scalars().first()
+        
+        if user_row:
+            if "companyName" in data and data["companyName"]:
+                user_row.full_name = data["companyName"]
+            if "email" in data and data["email"] is not None:
+                user_row.email = data["email"]
+            if "phone" in data and data["phone"] is not None:
+                user_row.phone = data["phone"]
+            if "new_password" in data and data["new_password"]:
+                user_row.password_hash = generate_password_hash(data["new_password"])
+                
+            await db.commit()
     except Exception as e:
+        await db.rollback()
         print(f"Warning: Failed to update hr_users DB row: {e}")
         
     return {"status": "success", "settings": current_settings}

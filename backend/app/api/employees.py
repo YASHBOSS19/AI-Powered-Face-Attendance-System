@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import update, delete
+from sqlalchemy.exc import IntegrityError
 from app.db.database import get_db
 from app.schemas.models import EmployeeRegistration, FaceLinkRequest
+from app.db.models import Employee, FaceEmbedding, Attendance
 from app.core.security import get_current_user
 from pydantic import BaseModel
-import mysql.connector
-import mysql.connector.connection_cext as mysql_conn
 import csv
 import json
 import codecs
@@ -15,22 +18,30 @@ from typing import Optional, Dict
 router = APIRouter(prefix="/api/employees", tags=["employees"])
 
 @router.get("/export-json")
-def export_json(db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
-    cursor = db.cursor(dictionary=True)
+async def export_json(db: AsyncSession = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
+    # Get employees
+    emp_query = select(Employee).where(Employee.hr_user_id == hr_user_id)
+    emp_res = await db.execute(emp_query)
+    employees = emp_res.scalars().all()
     
-    cursor.execute("SELECT employee_id, name, domain, department, position FROM employees WHERE hr_user_id = %s", (hr_user_id,))
-    employees = cursor.fetchall()
-    
-    cursor.execute("SELECT id, employee_id, date, checkin, checkout, status FROM attendance WHERE hr_user_id = %s", (hr_user_id,))
-    attendance = cursor.fetchall()
+    # Get attendance
+    att_query = select(Attendance).where(Attendance.hr_user_id == hr_user_id)
+    att_res = await db.execute(att_query)
+    attendance = att_res.scalars().all()
     
     attendance_by_emp = {}
     for record in attendance:
-        emp_id = record["employee_id"]
+        emp_id = record.employee_id
         if emp_id not in attendance_by_emp:
             attendance_by_emp[emp_id] = []
-        del record["employee_id"]
-        attendance_by_emp[emp_id].append(record)
+        
+        attendance_by_emp[emp_id].append({
+            "id": record.id,
+            "date": record.date,
+            "checkin": record.checkin,
+            "checkout": record.checkout,
+            "status": record.status.value if record.status else None
+        })
         
     export_data = {
         "platform": "Identifi HR Portal",
@@ -38,8 +49,14 @@ def export_json(db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: i
     }
     
     for emp in employees:
-        emp_data = dict(emp)
-        emp_data["attendance_logs"] = attendance_by_emp.get(emp["employee_id"], [])
+        emp_data = {
+            "employee_id": emp.employee_id,
+            "name": emp.name,
+            "domain": emp.domain,
+            "department": emp.department,
+            "position": emp.position
+        }
+        emp_data["attendance_logs"] = attendance_by_emp.get(emp.employee_id, [])
         export_data["employees"].append(emp_data)
         
     json_str = json.dumps(export_data, indent=2, default=str)
@@ -51,75 +68,80 @@ def export_json(db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: i
     )
 
 @router.get("")
-def list_employees(db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
-    cursor = db.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT e.employee_id, e.name, e.domain, e.department, e.position, 
-               e.email, e.phone, e.custom_fields, e.registered_date, f.embedding_name
-        FROM employees e
-        LEFT JOIN face_embeddings f ON e.employee_id = f.employee_id AND e.hr_user_id = f.hr_user_id
-        WHERE e.hr_user_id = %s
-    """, (hr_user_id,))
-    rows = cursor.fetchall()
+async def list_employees(db: AsyncSession = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
+    query = select(Employee, FaceEmbedding.embedding_name).outerjoin(
+        FaceEmbedding, 
+        (Employee.employee_id == FaceEmbedding.employee_id) & (Employee.hr_user_id == FaceEmbedding.hr_user_id)
+    ).where(Employee.hr_user_id == hr_user_id)
     
-    employees = []
-    for row in rows:
-        employees.append({
-            "employee_id": row["employee_id"],
-            "name": row["name"],
-            "domain": row["domain"],
-            "department": row["department"],
-            "position": row["position"],
-            "email": row["email"],
-            "phone": row["phone"],
-            "custom_fields": json.loads(row["custom_fields"]) if row["custom_fields"] else None,
-            "registered_date": str(row["registered_date"]) if row["registered_date"] else None,
-            "embedding_name": row["embedding_name"]
+    result = await db.execute(query)
+    
+    employees_list = []
+    for emp, embedding_name in result.all():
+        employees_list.append({
+            "employee_id": emp.employee_id,
+            "name": emp.name,
+            "domain": emp.domain,
+            "department": emp.department,
+            "position": emp.position,
+            "email": emp.email,
+            "phone": emp.phone,
+            "custom_fields": emp.custom_fields,
+            "registered_date": str(emp.registered_date) if emp.registered_date else None,
+            "embedding_name": embedding_name
         })
         
-    return {"status": "success", "count": len(employees), "employees": employees}
+    return {"status": "success", "count": len(employees_list), "employees": employees_list}
 
 @router.post("/register")
-def register_employee(data: EmployeeRegistration, db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
-    cursor = db.cursor()
+async def register_employee(data: EmployeeRegistration, db: AsyncSession = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
     try:
-        custom_fields_json = json.dumps(data.custom_fields) if data.custom_fields else None
-
-        cursor.execute("""
-            INSERT INTO employees (employee_id, hr_user_id, name, domain, department, position, email, phone, custom_fields)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data.employee_id, hr_user_id, data.name, data.domain, data.department, data.position, data.email, data.phone, custom_fields_json))
-        db.commit()
+        new_emp = Employee(
+            employee_id=data.employee_id,
+            hr_user_id=hr_user_id,
+            name=data.name,
+            domain=data.domain,
+            department=data.department,
+            position=data.position,
+            email=data.email,
+            phone=data.phone,
+            custom_fields=data.custom_fields
+        )
+        db.add(new_emp)
+        await db.commit()
         return {"status": "success", "message": "Employee registered successfully"}
-    except mysql.connector.errors.IntegrityError:
-        db.rollback()
+    except IntegrityError:
+        await db.rollback()
         raise HTTPException(status_code=400, detail="Employee ID already exists")
 
 @router.post("/link-face")
-def link_face(data: FaceLinkRequest, db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
-    cursor = db.cursor(dictionary=True)
+async def link_face(data: FaceLinkRequest, db: AsyncSession = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
     try:
-        cursor.execute("SELECT employee_id FROM face_embeddings WHERE employee_id = %s AND hr_user_id = %s", (data.employee_id, hr_user_id))
-        if cursor.fetchone():
-            cursor.execute("""
-                UPDATE face_embeddings SET embedding_name = %s WHERE employee_id = %s AND hr_user_id = %s
-            """, (data.embedding_name, data.employee_id, hr_user_id))
+        query = select(FaceEmbedding).where(FaceEmbedding.employee_id == data.employee_id, FaceEmbedding.hr_user_id == hr_user_id)
+        result = await db.execute(query)
+        existing = result.scalars().first()
+        
+        if existing:
+            existing.embedding_name = data.embedding_name
         else:
-            cursor.execute("""
-                INSERT INTO face_embeddings (employee_id, hr_user_id, embedding_name)
-                VALUES (%s, %s, %s)
-            """, (data.employee_id, hr_user_id, data.embedding_name))
-        db.commit()
+            new_link = FaceEmbedding(
+                employee_id=data.employee_id,
+                hr_user_id=hr_user_id,
+                embedding_name=data.embedding_name
+            )
+            db.add(new_link)
+            
+        await db.commit()
         return {"status": "success", "message": "Face linked successfully"}
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/bulk-upload")
-def bulk_upload(
+async def bulk_upload(
     file: UploadFile = File(...),
     mapping: str = Form(...),
-    db: mysql_conn.CMySQLConnection = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     hr_user_id: int = Depends(get_current_user)
 ):
     try:
@@ -130,9 +152,9 @@ def bulk_upload(
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
 
-    csv_reader = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
+    content = await file.read()
+    csv_reader = csv.DictReader(codecs.iterdecode(content.splitlines(), 'utf-8'))
     
-    cursor = db.cursor()
     success_count = 0
     skipped_count = 0
 
@@ -163,18 +185,23 @@ def bulk_upload(
                 if val:
                     custom_fields_dict[csv_header] = val
 
-        custom_fields_json = json.dumps(custom_fields_dict) if custom_fields_dict else None
-
         try:
-            cursor.execute("""
-                INSERT INTO employees (employee_id, hr_user_id, name, domain, department, position, custom_fields)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (emp_id, hr_user_id, name, domain, department, position, custom_fields_json))
+            new_emp = Employee(
+                employee_id=emp_id,
+                hr_user_id=hr_user_id,
+                name=name,
+                domain=domain,
+                department=department,
+                position=position,
+                custom_fields=custom_fields_dict if custom_fields_dict else None
+            )
+            db.add(new_emp)
+            await db.commit()
             success_count += 1
-        except mysql.connector.errors.IntegrityError:
+        except IntegrityError:
+            await db.rollback()
             skipped_count += 1
 
-    db.commit()
     return {
         "status": "success", 
         "message": f"Successfully imported {success_count} employees.",
@@ -185,7 +212,7 @@ def bulk_upload(
 @router.post("/sql-upload")
 async def sql_upload(
     file: UploadFile = File(...),
-    db: mysql_conn.CMySQLConnection = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     hr_user_id: int = Depends(get_current_user)
 ):
     if not (file.filename.endswith('.sql') or file.filename.endswith('.db')):
@@ -194,7 +221,6 @@ async def sql_upload(
     content = await file.read()
     text = content.decode('utf-8', errors='ignore')
     
-    cursor = db.cursor()
     success_count = 0
     skipped_count = 0
     
@@ -213,15 +239,21 @@ async def sql_upload(
                 pos = strings[4] if len(strings) > 4 else ""
                 
                 try:
-                    cursor.execute("""
-                        INSERT INTO employees (employee_id, hr_user_id, name, domain, department, position)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (emp_id, hr_user_id, name, domain, dept, pos))
+                    new_emp = Employee(
+                        employee_id=emp_id,
+                        hr_user_id=hr_user_id,
+                        name=name,
+                        domain=domain,
+                        department=dept,
+                        position=pos
+                    )
+                    db.add(new_emp)
+                    await db.commit()
                     success_count += 1
-                except mysql.connector.errors.IntegrityError:
+                except IntegrityError:
+                    await db.rollback()
                     skipped_count += 1
                     
-    db.commit()
     return {
         "status": "success", 
         "message": f"Successfully imported {success_count} employees.",
@@ -239,33 +271,33 @@ class EmployeeUpdateRequest(BaseModel):
     custom_fields: Optional[Dict[str, str]] = None
 
 @router.put("/{employee_id}")
-def update_employee(employee_id: str, data: EmployeeUpdateRequest, db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
-    cursor = db.cursor()
-
-    cursor.execute("SELECT employee_id FROM employees WHERE employee_id = %s AND hr_user_id = %s", (employee_id, hr_user_id))
-    if not cursor.fetchone():
+async def update_employee(employee_id: str, data: EmployeeUpdateRequest, db: AsyncSession = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
+    query = select(Employee).where(Employee.employee_id == employee_id, Employee.hr_user_id == hr_user_id)
+    result = await db.execute(query)
+    emp = result.scalars().first()
+    
+    if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    custom_fields_json = json.dumps(data.custom_fields) if data.custom_fields else None
-
-    cursor.execute("""
-        UPDATE employees 
-        SET name = %s, domain = %s, department = %s, position = %s, email = %s, phone = %s, custom_fields = %s
-        WHERE employee_id = %s AND hr_user_id = %s
-    """, (data.name, data.domain, data.department, data.position, data.email, data.phone, custom_fields_json, employee_id, hr_user_id))
-    db.commit()
+    emp.name = data.name
+    emp.domain = data.domain
+    emp.department = data.department
+    emp.position = data.position
+    emp.email = data.email
+    emp.phone = data.phone
+    emp.custom_fields = data.custom_fields
+    
+    await db.commit()
     
     return {"status": "success", "message": "Employee updated successfully"}
 
 @router.delete("/{employee_id}")
-def delete_employee(employee_id: str, db: mysql_conn.CMySQLConnection = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
-    cursor = db.cursor()
+async def delete_employee(employee_id: str, db: AsyncSession = Depends(get_db), hr_user_id: int = Depends(get_current_user)):
+    # Relationships with cascade="all, delete-orphan" will handle FaceEmbedding and Attendance cleanup
+    query = delete(Employee).where(Employee.employee_id == employee_id, Employee.hr_user_id == hr_user_id)
+    result = await db.execute(query)
+    await db.commit()
     
-    cursor.execute("DELETE FROM face_embeddings WHERE employee_id = %s AND hr_user_id = %s", (employee_id, hr_user_id))
-    cursor.execute("DELETE FROM attendance WHERE employee_id = %s AND hr_user_id = %s", (employee_id, hr_user_id))
-    cursor.execute("DELETE FROM employees WHERE employee_id = %s AND hr_user_id = %s", (employee_id, hr_user_id))
-    db.commit()
-    
-    if cursor.rowcount > 0:
+    if result.rowcount > 0:
         return {"status": "success", "message": "Employee deleted successfully"}
     raise HTTPException(status_code=404, detail="Employee not found")

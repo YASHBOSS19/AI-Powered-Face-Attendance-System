@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
 
-from app.core.embedding_db import init_db as init_embed_db
-from app.core.attendance_db import init_db as init_att_db
+# using alembic for db
 from app.core.ws_manager import manager
 from app.api import auth, employees, face, attendance, settings, super_admin
 from fastapi.staticfiles import StaticFiles
@@ -12,9 +11,7 @@ from fastapi.staticfiles import StaticFiles
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
-    print("[*] Initializing databases...")
-    init_embed_db()
-    init_att_db()
+    print("[*] Starting HR Backend...")
     yield
     # Shutdown logic
     print("[*] Shutting down...")

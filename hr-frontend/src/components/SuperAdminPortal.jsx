@@ -1118,7 +1118,12 @@ export default function SuperAdminPortal() {
                           <input 
                             type="tel" 
                             value={newUser.phone} 
-                            onChange={e => setNewUser({...newUser, phone: e.target.value})}
+                            onChange={e => {
+                              const val = e.target.value.replace(/[^0-9+\-() ]/g, '');
+                              if (val.length <= 20) {
+                                setNewUser({...newUser, phone: val});
+                              }
+                            }}
                             className="w-full pl-10 pr-4 py-2.5 bg-gray-50/70 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal outline-none transition-all" 
                             placeholder="+1 (555) 000-0000"
                           />
@@ -1453,7 +1458,12 @@ export default function SuperAdminPortal() {
                     <input
                       type="tel"
                       value={editForm.phone}
-                      onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9+\-() ]/g, '');
+                        if (val.length <= 20) {
+                          setEditForm({ ...editForm, phone: val });
+                        }
+                      }}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal outline-none transition-all"
                       placeholder="+1 (555) 000-0000"
                     />
