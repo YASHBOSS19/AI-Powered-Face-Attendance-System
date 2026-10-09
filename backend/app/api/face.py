@@ -122,12 +122,14 @@ async def recognize(data: RecognizeRequest, db: AsyncSession = Depends(get_db), 
                 if match:
                     emp_id = match.group(1)
 
+            profile_pic = None
             if emp_id:
-                q = select(Employee.name).where(Employee.employee_id == emp_id, Employee.hr_user_id == hr_user_id)
+                q = select(Employee).where(Employee.employee_id == emp_id, Employee.hr_user_id == hr_user_id)
                 res = await db.execute(q)
-                row = res.scalars().first()
-                if row:
-                    name = row
+                emp_obj = res.scalars().first()
+                if emp_obj:
+                    name = emp_obj.name
+                    profile_pic = emp_obj.profile_picture
                 elif raw_matched_name.startswith(emp_id):
                     clean_n = raw_matched_name[len(emp_id):].lstrip('_ ').replace('_', ' ').strip()
                     if clean_n:
@@ -154,6 +156,7 @@ async def recognize(data: RecognizeRequest, db: AsyncSession = Depends(get_db), 
         results.append({
             "name": name,
             "employee_id": emp_id,
+            "profile_picture": profile_pic if matched else None,
             "confidence": float(score) if score != -1 else 0.0,
             "box": bbox,
             "status": status,

@@ -1,0 +1,78 @@
+[
+  {
+    "id": "free",
+    "name": "Free Plan",
+    "tagline": "Essential biometric attendance for small teams & testing",
+    "max_employees": 10,
+    "price_monthly": 0,
+    "price_annual": 0,
+    "badge_color": "slate",
+    "badge_label": "Free Starter",
+    "features": [
+      "Up to 10 Employee Seats",
+      "Real-Time Face Kiosk Check-In",
+      "Core Staff Profiles & Directory",
+      "Daily Check-In & Out Logs",
+      "Standard Community Support"
+    ],
+    "default_modules": [
+      "overview",
+      "employees",
+      "kiosk"
+    ]
+  },
+  {
+    "id": "basic",
+    "name": "Basic Plan",
+    "tagline": "Full biometric tracking & reporting for growing businesses",
+    "max_employees": 50,
+    "price_monthly": 49,
+    "price_annual": 470,
+    "badge_color": "blue",
+    "badge_label": "Most Popular",
+    "is_popular": true,
+    "features": [
+      "Up to 50 Employee Seats (Configurable)",
+      "Face Biometric AI Vector Recognition",
+      "Interactive Kiosk + Gate Access",
+      "Department Attendance Reports & CSV Export",
+      "Unknown Identity Intruder Capture & Alerts",
+      "Automatic Headcount Limit Warnings (\u226580%)"
+    ],
+    "default_modules": [
+      "overview",
+      "employees",
+      "kiosk",
+      "reports",
+      "unknown_identity"
+    ]
+  },
+  {
+    "id": "enterprise",
+    "name": "Enterprise Plan",
+    "tagline": "Unlimited scale, turnstile hardware relay, audit trail & dedicated SLA",
+    "max_employees": 500,
+    "price_monthly": 299,
+    "price_annual": 2870,
+    "badge_color": "amber",
+    "badge_label": "Enterprise Scale",
+    "is_recommended": true,
+    "features": [
+      "500+ Employee Seats (Custom Expandable)",
+      "Dedicated Biometric Vector Indexing",
+      "Hardware Turnstile Gate Relay Control",
+      "Advanced System Thresholds & Settings",
+      "Complete Platform Audit Trail Logs",
+      "Custom Late Thresholds & 24/7 Priority SLA"
+    ],
+    "default_modules": [
+      "overview",
+      "employees",
+      "kiosk",
+      "reports",
+      "unknown_identity",
+      "gate",
+      "settings"
+    ]
+  }
+]

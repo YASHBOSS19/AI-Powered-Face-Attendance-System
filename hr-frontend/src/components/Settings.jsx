@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Building2, Image as ImageIcon, Clock, Save, Upload, Sparkles, CheckCircle2, 
   AlertCircle, Briefcase, Mail, Phone, Calendar, ShieldCheck, UserCheck, ExternalLink, 
   Camera, RefreshCw, X, Key, Eye, EyeOff, Check, Layers, ArrowUpRight, HelpCircle,
-  Lock, Laptop, Shield
+  Lock, Laptop, Shield, Crown, Users, CreditCard, Zap, ChevronLeft
 } from 'lucide-react';
 import { apiCall } from '../api';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('branding');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -24,6 +26,14 @@ export default function Settings() {
   const [status, setStatus] = useState('active');
   const [createdAt, setCreatedAt] = useState('');
   const [modules, setModules] = useState(['overview', 'employees', 'kiosk', 'reports', 'unknown_identity']);
+
+  // Subscription & Seat Limit states
+  const [planId, setPlanId] = useState('basic');
+  const [planName, setPlanName] = useState('Basic Plan');
+  const [maxEmployees, setMaxEmployees] = useState(50);
+  const [billingCycle, setBillingCycle] = useState('monthly');
+  const [subscriptionStatus, setSubscriptionStatus] = useState('active');
+  const [employeeCount, setEmployeeCount] = useState(0);
   
   // Logo & Schedule states
   const [logoUrl, setLogoUrl] = useState('');
@@ -79,6 +89,20 @@ export default function Settings() {
       if (data.workingDays) setWorkingDays(data.workingDays);
       if (data.lateThresholdTime) setLateThresholdTime(data.lateThresholdTime);
       if (data.modules) setModules(data.modules);
+      if (data.planId) setPlanId(data.planId);
+      if (data.planName) setPlanName(data.planName);
+      if (data.maxEmployees) setMaxEmployees(data.maxEmployees);
+      if (data.billingCycle) setBillingCycle(data.billingCycle);
+      if (data.subscriptionStatus) setSubscriptionStatus(data.subscriptionStatus);
+
+      try {
+        const empData = await apiCall('/employees');
+        if (empData && empData.count !== undefined) {
+          setEmployeeCount(empData.count);
+        }
+      } catch (e) {
+        // Non-blocking fallback
+      }
     } catch (err) {
       console.error("Failed to load settings", err);
       setError(err.message || 'Failed to load organization settings');
@@ -206,8 +230,15 @@ export default function Settings() {
 
         <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
           
-          {/* Logo + Company Title & Subtitle + Upload Section */}
+          {/* Back button + Logo + Company Title & Subtitle */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <button
+              onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/'); }}
+              className="w-10 h-10 rounded-full border border-white/20 bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shadow-sm shrink-0"
+              title="Back to Previous Page"
+            >
+              <ChevronLeft size={20} />
+            </button>
             {/* Logo Avatar Box */}
             <div className="relative group">
               <div className="h-20 w-20 md:h-24 md:w-24 rounded-2xl bg-white p-2 flex items-center justify-center overflow-hidden shrink-0 shadow-lg border-2 border-white/20">
@@ -307,6 +338,7 @@ export default function Settings() {
         <div className="relative z-10 flex flex-wrap gap-2 mt-6 pt-5 border-t border-white/10">
           {[
             { id: 'branding', label: 'Company Profile & Branding', icon: <Building2 size={15} /> },
+            { id: 'plan', label: 'Subscription & Seat Quota', icon: <Crown size={15} /> },
             { id: 'attendance', label: 'Attendance & Operating Shifts', icon: <Clock size={15} /> },
             { id: 'modules', label: 'Enabled Features & Modules', icon: <Layers size={15} /> },
             { id: 'security', label: 'Account Credentials & Security', icon: <ShieldCheck size={15} /> },
@@ -460,7 +492,133 @@ export default function Settings() {
             </div>
           )}
 
-          {/* TAB 2: Attendance & Operating Shifts */}
+          {/* TAB 2: Subscription & Seat Quota */}
+          {activeTab === 'plan' && (
+            <div className="bg-white border border-slate-200/90 rounded-3xl p-6 md:p-8 shadow-sm space-y-6 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between pb-5 border-b border-slate-100 flex-wrap gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shadow-xs">
+                    <Crown size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Subscription & Employee Seat Quota</h3>
+                    <p className="text-xs text-slate-500 font-medium">Your current platform plan tier, headcount capacity quota, and billing terms.</p>
+                  </div>
+                </div>
+
+                <span className="px-3.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {subscriptionStatus.toUpperCase()}
+                </span>
+              </div>
+
+              {/* Plan Banner Card */}
+              <div className={`p-6 rounded-2xl border-2 space-y-4 ${
+                planId === 'enterprise' ? 'bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-white border-amber-300' :
+                planId === 'basic' ? 'bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-white border-blue-300' :
+                'bg-gradient-to-br from-slate-500/10 via-slate-500/5 to-white border-slate-300'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Current Assigned Tier</span>
+                    <h4 className="text-2xl font-black text-slate-900 flex items-center gap-2 mt-0.5">
+                      {planName}
+                      <span className="text-xs font-bold bg-white text-slate-700 px-2.5 py-0.5 rounded-full border border-slate-200 shadow-2xs capitalize">
+                        {billingCycle} Billing
+                      </span>
+                    </h4>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <span className="text-xs font-semibold text-slate-500">Allowed Headcount</span>
+                    <p className="text-2xl font-black text-brand-teal font-mono">{maxEmployees} <span className="text-xs font-normal text-slate-400">Seats</span></p>
+                  </div>
+                </div>
+
+                {/* Capacity Progress Bar */}
+                {(() => {
+                  const usedPct = Math.min(100, Math.round((employeeCount / maxEmployees) * 100)) || 0;
+                  const available = Math.max(0, maxEmployees - employeeCount);
+                  const isWarning = employeeCount >= Math.floor(0.8 * maxEmployees);
+                  const isFull = employeeCount >= maxEmployees;
+
+                  return (
+                    <div className="p-4 bg-white rounded-xl border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                        <span className="flex items-center gap-1.5">
+                          <Users size={14} className="text-brand-teal" />
+                          <span>{employeeCount} Registered</span> / <span>{maxEmployees} Maximum Seats</span>
+                        </span>
+                        <span className={isFull ? 'text-rose-600 font-black' : isWarning ? 'text-amber-600 font-black' : 'text-slate-600'}>
+                          {usedPct}% Utilized ({available} seats left)
+                        </span>
+                      </div>
+                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            isFull ? 'bg-rose-500' : isWarning ? 'bg-amber-500' : 'bg-gradient-to-r from-brand-teal to-emerald-500'
+                          }`}
+                          style={{ width: `${usedPct}%` }}
+                        />
+                      </div>
+                      {isFull && (
+                        <p className="text-xs font-bold text-rose-600 flex items-center gap-1.5 pt-1">
+                          <AlertCircle size={14} /> Employee seat quota reached (100%). New registrations are locked until upgraded.
+                        </p>
+                      )}
+                      {!isFull && isWarning && (
+                        <p className="text-xs font-bold text-amber-600 flex items-center gap-1.5 pt-1">
+                          <AlertCircle size={14} /> Approaching capacity limit (≥80%). Please plan to upgrade soon.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Tier Features Entitlements */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Biometric Recognition</span>
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <CheckCircle2 size={13} className="text-emerald-500" /> Face Vector AI
+                    </p>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Gate Hardware Relay</span>
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      {modules.includes('gate') ? (
+                        <><CheckCircle2 size={13} className="text-emerald-500" /> Turnstile Enabled</>
+                      ) : (
+                        <><span className="text-slate-400">Standard Kiosk</span></>
+                      )}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Intruder Alerts</span>
+                    <p className="font-bold text-slate-800 flex items-center gap-1.5">
+                      {modules.includes('unknown_identity') ? (
+                        <><CheckCircle2 size={13} className="text-emerald-500" /> Real-time Alerting</>
+                      ) : (
+                        <><span className="text-slate-400">Disabled</span></>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upgrade Advice Banner */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start gap-3.5">
+                <Sparkles size={20} className="text-brand-teal flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-slate-900">Need to expand your team or upgrade your tier?</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Subscription plans, seat capacity additions, and hardware relay integrations are managed centrally by the <strong>Super Administrator</strong>. Contact your system admin to increase your seat cap or upgrade to <strong>Enterprise Scale</strong>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: Attendance & Operating Shifts */}
           {activeTab === 'attendance' && (
             <div className="bg-white border border-slate-200/90 rounded-3xl p-6 md:p-8 shadow-sm space-y-6 animate-in fade-in duration-200">
               <div className="flex items-center gap-3.5 pb-5 border-b border-slate-100">

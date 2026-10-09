@@ -85,3 +85,31 @@
 .back {
   transform: rotateY(180deg);
 }
+
+/* ==========================================================================
+   Super Admin Panel Flat Architecture - 0 Border Radius (No Curves on Cards & KPIs)
+   ========================================================================== */
+.super-admin-scope,
+.super-admin-scope * {
+  border-radius: 0px !important;
+}
+
+.super-admin-scope button,
+.super-admin-scope input,
+.super-admin-scope select,
+.super-admin-scope textarea,
+.super-admin-scope table,
+.super-admin-scope th,
+.super-admin-scope td,
+.super-admin-scope tr {
+  border-radius: 0px !important;
+}
+
+.super-admin-scope .shadow-xl,
+.super-admin-scope .shadow-2xl,
+.super-admin-scope .shadow-lg,
+.super-admin-scope .shadow-md,
+.super-admin-scope .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+

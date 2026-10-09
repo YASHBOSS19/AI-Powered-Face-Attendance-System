@@ -1,4 +1,5 @@
 import os
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -185,6 +186,7 @@ async def get_attendance_report(db: AsyncSession, hr_user_id: int, date_from: st
         Employee.name,
         Employee.domain,
         Employee.department,
+        Employee.profile_picture,
         func.sum(case((Attendance.status.in_([AttendanceStatus.present, AttendanceStatus.late]), 1), else_=0)).label('days_present'),
         func.sum(case((Attendance.status == AttendanceStatus.late, 1), else_=0)).label('days_late'),
         func.sum(case((Attendance.status == AttendanceStatus.absent, 1), else_=0)).label('days_absent')
@@ -206,6 +208,7 @@ async def get_attendance_report(db: AsyncSession, hr_user_id: int, date_from: st
             "name": r.name,
             "domain": r.domain,
             "department": r.department,
+            "profile_picture": r.profile_picture,
             "days_present": int(r.days_present or 0),
             "days_late": int(r.days_late or 0),
             "days_absent": int(r.days_absent or 0)
@@ -273,6 +276,7 @@ async def get_today_attendance_summary(db: AsyncSession, hr_user_id: int):
     for att, emp in records_res.all():
         dept = emp.department if emp and emp.department else (emp.domain if emp and emp.domain else 'General')
         pos = emp.position if emp else None
+        prof_pic = emp.profile_picture if emp else None
         today_records.append({
             "id": att.id,
             "employee_id": att.employee_id,
@@ -283,7 +287,8 @@ async def get_today_attendance_summary(db: AsyncSession, hr_user_id: int):
             "checkout": att.checkout,
             "status": att.status.value if att.status else None,
             "department": dept,
-            "position": pos
+            "position": pos,
+            "profile_picture": prof_pic
         })
 
     present_today = len(today_records)
@@ -344,3 +349,93 @@ async def delete_attendance(db: AsyncSession, record_id: int, hr_user_id: int):
     result = await db.execute(query)
     await db.commit()
     return result.rowcount > 0
+
+async def create_manual_attendance(
+    db: AsyncSession,
+    hr_user_id: int,
+    employee_id: str,
+    date_str: str,
+    checkin: Optional[str] = "09:00:00",
+    checkout: Optional[str] = None,
+    status: str = "present",
+    note: Optional[str] = None
+):
+    """Create or regularize a manual attendance entry for an employee on any date."""
+    # 1. Fetch employee to get accurate name and domain/department
+    emp_q = select(Employee).where(
+        Employee.employee_id == employee_id,
+        Employee.hr_user_id == hr_user_id
+    )
+    emp_res = await db.execute(emp_q)
+    emp = emp_res.scalars().first()
+    if not emp:
+        # Fallback if employee_id passed as name
+        emp_q = select(Employee).where(
+            Employee.name == employee_id,
+            Employee.hr_user_id == hr_user_id
+        )
+        emp_res = await db.execute(emp_q)
+        emp = emp_res.scalars().first()
+
+    emp_name = emp.name if emp else None
+    if not emp:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Employee '{employee_id}' was not found in your directory.")
+    
+    emp_domain = emp.department if emp.department else (emp.domain if emp.domain else "General")
+    
+    status_lower = status.lower() if status else "present"
+    status_enum = AttendanceStatus(status_lower) if status_lower in ["present", "late", "absent"] else AttendanceStatus.present
+
+    # 2. Check if a record already exists on that date
+    existing_q = select(Attendance).where(
+        Attendance.hr_user_id == hr_user_id,
+        or_(Attendance.employee_id == employee_id, Attendance.name == emp_name),
+        Attendance.date == date_str
+    )
+    existing_res = await db.execute(existing_q)
+    existing = existing_res.scalars().first()
+
+    if existing:
+        if checkin:
+            existing.checkin = checkin
+        if checkout:
+            existing.checkout = checkout
+        existing.status = status_enum
+        await db.commit()
+        await db.refresh(existing)
+        return {
+            "id": existing.id,
+            "employee_id": existing.employee_id,
+            "name": existing.name,
+            "date": existing.date,
+            "checkin": existing.checkin,
+            "checkout": existing.checkout,
+            "status": existing.status.value if existing.status else None,
+            "is_updated": True
+        }
+
+    # 3. Create new attendance entry
+    new_record = Attendance(
+        employee_id=emp.employee_id if emp else employee_id,
+        hr_user_id=hr_user_id,
+        name=emp_name,
+        domain=emp_domain,
+        date=date_str,
+        checkin=checkin,
+        checkout=checkout,
+        status=status_enum
+    )
+    db.add(new_record)
+    await db.commit()
+    await db.refresh(new_record)
+    return {
+        "id": new_record.id,
+        "employee_id": new_record.employee_id,
+        "name": new_record.name,
+        "date": new_record.date,
+        "checkin": new_record.checkin,
+        "checkout": new_record.checkout,
+        "status": new_record.status.value if new_record.status else None,
+        "is_updated": False
+    }

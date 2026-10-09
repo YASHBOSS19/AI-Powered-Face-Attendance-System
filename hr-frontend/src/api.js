@@ -23,6 +23,23 @@ export const getWebSocketUrl = (path) => {
   return `${protocol}//${window.location.host}${normalizedPath}`;
 };
 
+export const getProfileImageUrl = (url) => {
+  if (!url) return null;
+  if (typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('r2://')) {
+    return null;
+  }
+  if (trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  return `/${trimmed}`;
+};
+
 export const apiCall = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;

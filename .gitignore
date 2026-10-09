@@ -24,6 +24,15 @@ hr-frontend/dist/
 .eslintcache
 
 # SQLite Database & Data
+*.db
+*.sqlite
+*.sqlite3
+backend/*.db
+
+# Python Pickles & Cache
+*.pkl
+*.pickle
+backend/*.pkl
 
 # Dataset images (optional)
 dataset/
@@ -34,13 +43,17 @@ backend/dataset/
 .env.local
 .env.production
 
-# Static Logo folder
+# Static Logo & Profile Upload folders (Dynamic user runtime data)
 backend/static/logo/
 backend/static/logos/
+backend/static/profiles/
+backend/static/uploads/
 hr-frontend/public/logo/
 hr-frontend/public/logos/
 static/logo/
 static/logos/
+static/profiles/
+static/uploads/
 
 # Runtime Tenant Settings
 settings_*.json

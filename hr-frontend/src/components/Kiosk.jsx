@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, RefreshCw, FlipHorizontal, Play, Pause, LogIn, LogOut, CheckCircle2, AlertCircle, X } from 'lucide-react';
-import { apiCall } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { Camera, RefreshCw, FlipHorizontal, Play, Pause, LogIn, LogOut, CheckCircle2, AlertCircle, X, ChevronLeft } from 'lucide-react';
+import { apiCall, getProfileImageUrl } from '../api';
 
 export default function Kiosk() {
+  const navigate = useNavigate();
   const [isCapturing, setIsCapturing] = useState(false);
   const [autoScan, setAutoScan] = useState(true);
   const [isFlipped, setIsFlipped] = useState(true);
@@ -182,6 +184,7 @@ export default function Kiosk() {
             rawName: first.name,
             displayName,
             empId,
+            profilePicture: first.profile_picture,
             confidence: (first.confidence * 100).toFixed(1),
             todayStatus: first.today_status || {}
           });
@@ -248,9 +251,20 @@ export default function Kiosk() {
 
   return (
     <div className="mx-auto flex flex-col items-center">
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-gray-800">HR Live Attendance Scanner</h2>
-        <p className="text-gray-500 mt-2">Recognize faces and select explicit Check In or Check Out actions.</p>
+      <div className="w-full flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <div 
+            onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/'); }}
+            className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors shrink-0 text-gray-500 hover:text-brand-navy shadow-sm bg-white" 
+            title="Back to Previous Page"
+          >
+            <ChevronLeft size={20} />
+          </div>
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">HR Live Attendance Scanner</h2>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Recognize faces and select explicit Check In or Check Out actions.</p>
+          </div>
+        </div>
       </div>
 
       <div className="w-full bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col lg:flex-row gap-8">
@@ -366,7 +380,19 @@ export default function Kiosk() {
                       <X size={18} />
                     </button>
 
-                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl font-bold shadow-sm">
+                    {recognitionResult.profilePicture ? (
+                      <img
+                        src={getProfileImageUrl(recognitionResult.profilePicture)}
+                        alt={recognitionResult.displayName}
+                        className="w-16 h-16 rounded-full object-cover shadow-sm mx-auto mb-3 border-2 border-white ring-2 ring-blue-100"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.style.display = 'none';
+                          if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div className={`w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl font-bold shadow-sm ${recognitionResult.profilePicture ? 'hidden' : 'flex'}`}>
                       {recognitionResult.displayName.charAt(0).toUpperCase()}
                     </div>
 

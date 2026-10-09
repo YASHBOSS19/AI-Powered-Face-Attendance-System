@@ -10,12 +10,21 @@ from app.core.attendance_db import (
     record_checkout,
     get_today_attendance_summary,
     update_attendance,
-    delete_attendance
+    delete_attendance,
+    create_manual_attendance
 )
 from app.core.security import get_current_user
 from app.core.ws_manager import manager
 
 router = APIRouter(prefix="/api/attendance", tags=["attendance"])
+
+class ManualAttendanceRequest(BaseModel):
+    employee_id: str
+    date: str
+    checkin: Optional[str] = "09:00:00"
+    checkout: Optional[str] = None
+    status: Optional[str] = "present"
+    reason: Optional[str] = None
 
 class AttendanceActionRequest(BaseModel):
     action: str  # "checkin" or "checkout"
@@ -80,3 +89,29 @@ async def delete_record(record_id: int, hr_user_id: int = Depends(get_current_us
     if success:
         return {"status": "success", "message": "Attendance record deleted successfully"}
     raise HTTPException(status_code=404, detail="Attendance record not found")
+
+@router.post("/manual")
+async def add_manual_attendance(
+    req: ManualAttendanceRequest,
+    hr_user_id: int = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create or regularize a manual attendance entry."""
+    record = await create_manual_attendance(
+        db=db,
+        hr_user_id=int(hr_user_id),
+        employee_id=req.employee_id,
+        date_str=req.date,
+        checkin=req.checkin,
+        checkout=req.checkout,
+        status=req.status or "present",
+        note=req.reason
+    )
+    await manager.broadcast({
+        "type": "ATTENDANCE_MARKED",
+        "name": record.get("name"),
+        "employee_id": record.get("employee_id"),
+        "status": record.get("status"),
+        "checkin": record.get("checkin")
+    })
+    return {"status": "success", "message": "Manual attendance entry saved successfully", "record": record}

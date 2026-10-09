@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Enum, ForeignKeyConstraint, Text
+from sqlalchemy import Column, Integer, String, JSON, DateTime, ForeignKey, Enum, ForeignKeyConstraint, Text, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -52,6 +52,7 @@ class Employee(Base):
     email = Column(String(255), nullable=True)
     phone = Column(String(255), nullable=True)
     custom_fields = Column(JSON, nullable=True)
+    profile_picture = Column(String(512), nullable=True)
     registered_date = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -117,3 +118,16 @@ class Attendance(Base):
 
     # Relationships
     employee = relationship("Employee", back_populates="attendance_records")
+
+class SystemAlert(Base):
+    __tablename__ = 'system_alerts'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tenant_id = Column(Integer, nullable=True)
+    type = Column(String(50), nullable=False)  # 'NEW_TENANT', 'LIMIT_WARNING', 'LIMIT_EXCEEDED', 'STATUS_CHANGE', 'BIOMETRIC_LOW', 'SYSTEM'
+    severity = Column(String(20), nullable=False, default='info')  # 'info', 'warning', 'critical', 'success'
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    data = Column(JSON, nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

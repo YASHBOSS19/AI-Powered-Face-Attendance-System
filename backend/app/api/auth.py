@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from werkzeug.security import check_password_hash
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from datetime import datetime
 from app.db.database import get_db
 from app.schemas.models import LoginRequest
 from app.core.security import create_access_token
@@ -25,6 +26,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     # Allow default admin credentials for convenience
     if request.username == "admin" and request.password in ["admin123", "password123", "admin"]:
+        user.last_login = datetime.utcnow()
+        await db.commit()
         user_id = user.id
         role = user.role
         token = create_access_token(data={"user_id": user_id, "role": role})
@@ -40,6 +43,8 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     
     try:
         if check_password_hash(db_password_hash, request.password):
+            user.last_login = datetime.utcnow()
+            await db.commit()
             token = create_access_token(data={"user_id": user_id, "role": role})
             return {
                 "status": "success",

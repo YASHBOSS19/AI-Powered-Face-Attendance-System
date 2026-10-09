@@ -1,6 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { Users, FileText, LogOut, LayoutDashboard, Camera, ExternalLink, AlertTriangle, X, UserPlus, Clock, ChevronLeft, ChevronRight, ChevronDown, Menu, Settings as SettingsIcon, Calendar } from 'lucide-react';
+import { 
+  Users, FileText, LogOut, LayoutDashboard, Camera, ExternalLink, 
+  AlertTriangle, X, UserPlus, Clock, ChevronLeft, ChevronRight, 
+  ChevronDown, Menu, Settings as SettingsIcon, Calendar, Bell, 
+  ShieldAlert, Check, ArrowRight, Shield, AlertOctagon, CheckCircle2,
+  Info, Sparkles, RefreshCw, TrendingUp
+} from 'lucide-react';
 import { apiCall, getWebSocketUrl } from '../api';
 
 export default function Dashboard() {
@@ -11,6 +17,19 @@ export default function Dashboard() {
   const [expandedMenu, setExpandedMenu] = useState(location.pathname.startsWith('/employees') ? '/employees' : '');
   const [companyName, setCompanyName] = useState('IdentiFi HR');
   const [logoUrl, setLogoUrl] = useState('/logo.png');
+
+  // Smart Alerts State for Notification Bell
+  const [isBellOpen, setIsBellOpen] = useState(false);
+  const [alertsSummary, setAlertsSummary] = useState({
+    unread_count: 0,
+    critical_count: 0,
+    total_count: 0,
+    attendance_rate: 100,
+    habitual_late_count: 0,
+    seat_usage: { current: 0, limit: 50, pct: 0, plan: 'Basic Plan', remaining: 50 },
+    latest_alerts: []
+  });
+  const bellRef = useRef(null);
 
   const loadSettings = async () => {
     try {
@@ -32,8 +51,21 @@ export default function Dashboard() {
     }
   };
 
+  const fetchAlertsSummary = async () => {
+    try {
+      const res = await apiCall('/alerts/summary');
+      if (res.status === 'success') {
+        setAlertsSummary(res);
+      }
+    } catch (err) {
+      console.warn("Could not fetch alerts summary:", err);
+    }
+  };
+
   useEffect(() => {
     loadSettings();
+    fetchAlertsSummary();
+
     const handleSettingsUpdate = (e) => {
       if (e.detail) {
         if (e.detail.companyName) {
@@ -49,30 +81,18 @@ export default function Dashboard() {
     return () => window.removeEventListener('settingsUpdated', handleSettingsUpdate);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
-    navigate('/login');
-  };
+  // Close notification dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (bellRef.current && !bellRef.current.contains(event.target)) {
+        setIsBellOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  const navItems = [
-    { path: '/', label: 'Overview', icon: <LayoutDashboard size={20} /> },
-    {
-      path: '/employees',
-      label: 'Employees',
-      icon: <Users size={20} />,
-      subItems: [
-        { path: '/employees?tab=list', label: 'Directory', icon: <Users size={16} /> },
-        { path: '/employees?tab=register', label: 'Add New', icon: <UserPlus size={16} /> },
-        { path: '/employees?tab=face', label: 'Face Data', icon: <Camera size={16} /> },
-      ]
-    },
-    { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
-    { path: '/unknown-identity', label: 'Unknown Identity', icon: <AlertTriangle size={20} /> },
-    { path: '/kiosk', label: 'Live Recognition', icon: <Camera size={20} /> },
-    { path: '/settings', label: 'Settings', icon: <SettingsIcon size={20} /> },
-  ];
-
+  // WebSocket for Live Attendance & Smart Alerts Sync
   useEffect(() => {
     let ws = null;
     let isSubscribed = true;
@@ -89,6 +109,9 @@ export default function Dashboard() {
                 if (prev.find(a => a.image === msg.image)) return prev;
                 return [{ id: Date.now(), image: msg.image, box: msg.box, enrolling: false, enrollName: '' }, ...prev];
              });
+          }
+          if (msg.type === 'ATTENDANCE_MARKED' || msg.type === 'CHECKOUT_MARKED' || msg.type === 'UNKNOWN_FACE') {
+            fetchAlertsSummary();
           }
         } catch (err) {}
       };
@@ -107,6 +130,83 @@ export default function Dashboard() {
       }
     };
   }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    navigate('/login');
+  };
+
+  const handleQuickMarkRead = async (alertId, e) => {
+    e.stopPropagation();
+    try {
+      await apiCall(`/alerts/${alertId}/read`, { method: 'PUT' });
+      setAlertsSummary(prev => ({
+        ...prev,
+        unread_count: Math.max(0, prev.unread_count - 1),
+        latest_alerts: prev.latest_alerts.map(a => a.id === alertId ? { ...a, is_read: true } : a)
+      }));
+    } catch (err) {
+      console.error("Failed to mark alert as read:", err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await apiCall('/alerts/mark-all-read', { method: 'PUT' });
+      setAlertsSummary(prev => ({
+        ...prev,
+        unread_count: 0,
+        latest_alerts: prev.latest_alerts.map(a => ({ ...a, is_read: true }))
+      }));
+    } catch (err) {
+      console.error("Failed to mark all as read:", err);
+    }
+  };
+
+  const formatTimeAgo = (dateStr) => {
+    if (!dateStr) return 'Recently';
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMins / 60);
+
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const navItems = [
+    { path: '/', label: 'Overview', icon: <LayoutDashboard size={20} /> },
+    { path: '/analytics', label: 'Analytics', icon: <TrendingUp size={20} /> },
+    {
+      path: '/employees',
+      label: 'Employees',
+      icon: <Users size={20} />,
+      subItems: [
+        { path: '/employees?tab=list', label: 'Directory', icon: <Users size={16} /> },
+        { path: '/employees?tab=register', label: 'Add New', icon: <UserPlus size={16} /> },
+        { path: '/employees?tab=face', label: 'Face Data', icon: <Camera size={16} /> },
+      ]
+    },
+    { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
+    { 
+      path: '/alerts', 
+      label: 'Alerts Center', 
+      icon: <Bell size={20} />,
+      badge: alertsSummary.unread_count > 0 ? alertsSummary.unread_count : null,
+      badgeColor: alertsSummary.critical_count > 0 ? 'bg-rose-500' : 'bg-amber-500'
+    },
+    { path: '/unknown-identity', label: 'Unknown Identity', icon: <AlertTriangle size={20} /> },
+    { path: '/kiosk', label: 'Live Recognition', icon: <Camera size={20} /> },
+    { path: '/settings', label: 'Settings', icon: <SettingsIcon size={20} /> },
+  ];
 
   const handleEnroll = async (alert) => {
     setUnknownAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, enrolling: true } : a));
@@ -159,9 +259,13 @@ export default function Dashboard() {
       )}
 
       {/* Sidebar */}
-      <aside className={`bg-gradient-to-b from-brand-navy to-brand-dark text-white flex flex-col shadow-xl z-50 transition-all duration-300 absolute md:relative h-full ${
-        isSidebarOpen ? 'w-64 translate-x-0' : '-translate-x-full md:translate-x-0 md:w-20'
-      }`}>
+      <aside 
+        onMouseEnter={() => window.innerWidth >= 768 && setIsSidebarOpen(true)}
+        onMouseLeave={() => window.innerWidth >= 768 && setIsSidebarOpen(false)}
+        className={`bg-gradient-to-b from-brand-navy to-brand-dark text-white flex flex-col shadow-xl z-50 transition-all duration-300 ease-in-out absolute md:relative h-full ${
+          isSidebarOpen ? 'w-64 translate-x-0' : '-translate-x-full md:translate-x-0 md:w-20'
+        }`}
+      >
         
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -199,7 +303,7 @@ export default function Dashboard() {
                 <Link
                   to={item.path}
                   onClick={handleParentClick}
-                  className={`flex items-center px-4 py-3 rounded-lg transition-colors overflow-hidden ${
+                  className={`flex items-center px-4 py-3 rounded-lg transition-colors overflow-hidden relative ${
                     isSidebarOpen ? 'justify-between' : 'justify-center'
                   } ${
                     isActive
@@ -208,8 +312,15 @@ export default function Dashboard() {
                   }`}
                   title={!isSidebarOpen ? item.label : ""}
                 >
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">{item.icon}</div>
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <div className="flex-shrink-0 relative">
+                      {item.icon}
+                      {!isSidebarOpen && item.badge && (
+                        <span className={`absolute -top-1 -right-1.5 ${item.badgeColor || 'bg-rose-500'} text-white text-[9px] font-bold h-4 w-4 rounded-full flex items-center justify-center animate-pulse`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
                     {isSidebarOpen && <span className="font-medium tracking-wide whitespace-nowrap animate-in fade-in duration-300">{item.label}</span>}
                   </div>
 
@@ -221,6 +332,13 @@ export default function Dashboard() {
                         {unknownAlerts.length}
                       </span>
                     )}
+
+                    {isSidebarOpen && item.badge && (
+                      <span className={`${item.badgeColor || 'bg-rose-500'} text-white font-bold text-[10px] px-2 py-0.5 rounded-full animate-pulse shadow-xs`}>
+                        {item.badge}
+                      </span>
+                    )}
+
                     {isSidebarOpen && item.subItems && (
                       <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180 text-white' : 'text-gray-400'}`}>
                         <ChevronDown size={16} />
@@ -288,35 +406,187 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="flex-1 overflow-auto w-full relative min-w-0">
 
-        {/* Mobile Top Bar */}
-        <div className="md:hidden sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="text-brand-navy p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <Menu size={24} />
-          </button>
-          <span className="font-bold text-gray-800 tracking-tight">{companyName}</span>
+        {/* Top Navbar with Notification Bell and Breadcrumb */}
+        <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200/80 px-4 md:px-8 py-2.5 flex items-center justify-between shadow-xs">
+          
+          {/* Left: Mobile Toggle & Title */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden text-brand-navy p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Menu size={22} />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-slate-800 tracking-tight text-sm sm:text-base">{companyName}</span>
+              <span className="hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
+                Admin Portal
+              </span>
+            </div>
+          </div>
+
+          {/* Right: Notification Bell & Quick Info */}
+          <div className="flex items-center gap-3">
+            
+            {/* Notification Bell Dropdown Launcher */}
+            <div className="relative" ref={bellRef}>
+              <button
+                onClick={() => setIsBellOpen(!isBellOpen)}
+                className={`relative p-2 rounded-xl border transition-all duration-200 ${
+                  isBellOpen 
+                    ? 'bg-brand-navy text-white border-brand-navy shadow-sm' 
+                    : alertsSummary.unread_count > 0 
+                      ? 'bg-amber-50/80 text-slate-700 border-amber-200/80 hover:bg-amber-100/80' 
+                      : 'bg-white text-slate-600 border-gray-200 hover:bg-gray-100'
+                }`}
+                title="Smart Alerts & Notifications"
+              >
+                <Bell size={18} className={alertsSummary.unread_count > 0 ? "animate-wiggle" : ""} />
+                
+                {/* Unread Badge */}
+                {alertsSummary.unread_count > 0 && (
+                  <span className={`absolute -top-1 -right-1 px-1.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-black text-white flex items-center justify-center shadow-sm ${
+                    alertsSummary.critical_count > 0 ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'
+                  }`}>
+                    {alertsSummary.unread_count}
+                  </span>
+                )}
+              </button>
+
+              {/* FLOATING NOTIFICATION DROPDOWN */}
+              {isBellOpen && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  
+                  {/* DROPDOWN HEADER */}
+                  <div className="p-4 bg-gradient-to-r from-brand-navy to-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert size={18} className="text-brand-teal" />
+                      <div>
+                        <h4 className="font-bold text-sm tracking-tight">Smart Alerts</h4>
+                        <p className="text-[11px] text-slate-300">
+                          {alertsSummary.unread_count} unread alert{alertsSummary.unread_count === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {alertsSummary.unread_count > 0 && (
+                      <button
+                        onClick={handleMarkAllRead}
+                        className="text-[11px] font-bold text-brand-teal hover:text-emerald-400 flex items-center gap-1 transition"
+                      >
+                        <Check size={12} /> Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  {/* QUICK STATS STRIP */}
+                  <div className="grid grid-cols-3 bg-slate-50 border-b border-slate-100 text-center py-2 px-3 text-[11px] font-bold">
+                    <div className="border-r border-slate-200/60">
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Attendance</span>
+                      <span className={alertsSummary.attendance_rate < 70 ? 'text-amber-600' : 'text-emerald-600'}>
+                        {alertsSummary.attendance_rate}%
+                      </span>
+                    </div>
+                    <div className="border-r border-slate-200/60">
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Late (&ge;3x)</span>
+                      <span className={alertsSummary.habitual_late_count > 0 ? 'text-amber-600' : 'text-slate-700'}>
+                        {alertsSummary.habitual_late_count} staff
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[9px] uppercase font-bold">Seat Limit</span>
+                      <span className={alertsSummary.seat_usage?.pct >= 80 ? 'text-rose-600' : 'text-slate-700'}>
+                        {alertsSummary.seat_usage?.pct || 0}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ALERTS FEED IN DROPDOWN */}
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {alertsSummary.latest_alerts && alertsSummary.latest_alerts.length > 0 ? (
+                      alertsSummary.latest_alerts.map((alert) => {
+                        const isCritical = alert.severity === 'critical';
+                        const isWarning = alert.severity === 'warning';
+                        return (
+                          <div 
+                            key={alert.id}
+                            onClick={() => {
+                              setIsBellOpen(false);
+                              navigate('/alerts');
+                            }}
+                            className={`p-3.5 transition cursor-pointer flex items-start gap-3 hover:bg-slate-50 ${
+                              !alert.is_read ? 'bg-sky-50/40' : ''
+                            }`}
+                          >
+                            <div className="pt-0.5 flex-shrink-0">
+                              <div className={`w-2.5 h-2.5 rounded-full mt-1.5 ${
+                                isCritical ? 'bg-rose-500' : isWarning ? 'bg-amber-500' : 'bg-sky-500'
+                              }`} />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1 mb-0.5">
+                                <p className={`text-xs font-bold truncate ${!alert.is_read ? 'text-slate-900' : 'text-slate-700'}`}>
+                                  {alert.title}
+                                </p>
+                                <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                  {formatTimeAgo(alert.created_at)}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                                {alert.message}
+                              </p>
+                            </div>
+
+                            {!alert.is_read && (
+                              <button
+                                onClick={(e) => handleQuickMarkRead(alert.id, e)}
+                                className="p-1 hover:bg-slate-200/60 rounded text-slate-400 hover:text-brand-teal transition shrink-0"
+                                title="Mark read"
+                              >
+                                <Check size={13} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-6 text-center text-slate-400 space-y-1">
+                        <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-1" />
+                        <p className="text-xs font-bold text-slate-700">All Systems Operational</p>
+                        <p className="text-[11px]">No pending operational alerts.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* DROPDOWN FOOTER */}
+                  <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <Link
+                      to="/alerts"
+                      onClick={() => setIsBellOpen(false)}
+                      className="w-full text-center py-1.5 bg-brand-navy hover:bg-brand-blue text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs"
+                    >
+                      <span>Open Full Alerts Center</span>
+                      <ArrowRight size={13} />
+                    </Link>
+                  </div>
+
+                </div>
+              )}
+            </div>
+
+            {/* Date Widget */}
+            <div className="bg-white px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hidden sm:flex items-center gap-2">
+              <Calendar size={14} className="text-brand-teal" />
+              {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </div>
+          </div>
+
         </div>
 
-        <div className="px-4 py-3 md:px-8 md:pt-4 md:pb-6 mx-auto flex flex-col min-h-full">
-          {location.pathname === '/' && (
-            <header className="mb-4 animate-in fade-in slide-in-from-top-4 duration-500 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">
-                  Welcome <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-teal to-brand-blue">{companyName}</span>
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">Manage your workforce efficiently.</p>
-              </div>
-              <div className="bg-white px-4 py-2 rounded-xl border border-gray-100 text-xs sm:text-sm font-bold text-gray-700 hidden md:flex items-center gap-2 w-full md:w-auto shrink-0 justify-center">
-                <Calendar size={16} className="text-brand-teal" />
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-              </div>
-            </header>
-          )}
-
+        <div className="px-4 py-4 md:px-8 md:pt-6 md:pb-8 mx-auto flex flex-col min-h-full">
           <div className="flex-1">
-            <Outlet context={{ unknownAlerts, setUnknownAlerts, handleEnroll }} />
+            <Outlet context={{ unknownAlerts, setUnknownAlerts, handleEnroll, alertsSummary, refreshAlerts: fetchAlertsSummary }} />
           </div>
         </div>
       </main>

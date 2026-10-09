@@ -1,0 +1,59 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: always
+    env_file:
+      - .env.docker
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-attendance_db}
+      MYSQL_USER: ${DB_USER:-root}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-}
+      TZ: Asia/Kolkata
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      timeout: 20s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: always
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      TZ: Asia/Kolkata
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/static:/app/static
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  hr-frontend:
+    build:
+      context: ./hr-frontend
+      args:
+        - VITE_API_BASE_URL=/api
+        - VITE_WS_BASE_URL=/ws
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db_data:

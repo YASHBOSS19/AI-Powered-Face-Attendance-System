@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Camera, 
   RefreshCw, 
@@ -19,6 +20,7 @@ import {
 import { apiCall } from '../api';
 
 export default function GateKiosk() {
+  const navigate = useNavigate();
   const [isCapturing, setIsCapturing] = useState(false);
   const [autoScan, setAutoScan] = useState(true);
   const [isFlipped, setIsFlipped] = useState(true);
@@ -38,6 +40,23 @@ export default function GateKiosk() {
   const countdownIntervalRef = useRef(null);
   const isProcessingRef = useRef(false);
   const voicesRef = useRef([]);
+
+  useEffect(() => {
+    // Prevent back navigation by pushing a dummy state
+    window.history.pushState(null, '', window.location.href);
+
+    const handlePopState = () => {
+      // If user tries to go back, clear credentials and log them out
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      navigate('/login', { replace: true });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -351,13 +370,17 @@ export default function GateKiosk() {
 
       {/* Optional Fullscreen Exit Control */}
       <div className="absolute top-8 left-8 flex items-center gap-3 z-50">
-        <a 
-          href="/"
+        <button 
+          onClick={() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            navigate('/login', { replace: true });
+          }}
           className="p-3.5 rounded-2xl bg-black/20 backdrop-blur-md hover:bg-black/40 text-white transition shadow-lg border border-white/20"
-          title="Return to HR Portal"
+          title="Exit Kiosk & Lock Session"
         >
           <ArrowLeft size={20} />
-        </a>
+        </button>
         <button 
           onClick={toggleFullscreen}
           className="p-3.5 rounded-2xl bg-black/20 backdrop-blur-md hover:bg-black/40 text-white transition shadow-lg border border-white/20"

@@ -40,7 +40,29 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Step 1.3: Start Backend API Server
+### Step 1.3: Database Setup
+The backend uses **MySQL** and **Alembic** for managing the database and tables.
+
+1. Ensure MySQL is running on your system.
+2. Create a new database named `attendance_db` in your MySQL server.
+3. Configure the environment variables by creating a `.env` file in the `backend` directory (you can copy `.env.example` if it exists) and fill in your database credentials:
+   ```env
+   DB_HOST=localhost
+   DB_USER=root
+   DB_PASSWORD=your_password
+   DB_NAME=attendance_db
+   DB_PORT=3306
+   ```
+4. Run the database migrations to create all the necessary tables:
+   ```bash
+   alembic upgrade head
+   ```
+5. Seed the default super admin account and the `audit_logs` table:
+   ```bash
+   python scripts/seed_super_admin.py
+   ```
+
+### Step 1.4: Start Backend API Server
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -72,39 +94,21 @@ npm run dev
 ## 🚀 Application Links & Credentials
 
 - **HR Admin Portal**: `http://localhost:5173/login`
-  - **Username**: `admin`
-  - **Password**: `password123` *(or `admin123`)*
+  - **Username**: `admin` *(or `superadmin`)*
+  - **Password**: `password123` *(or `superadmin123`)*
 - **Gate Kiosk Terminal**: `http://localhost:5173/gate` *(For office entrance tablet deployment)*
 - **API Documentation**: `http://localhost:8000/docs`
 
 ---
 
-## 🧪 3. Testing Model Accuracy
+## 🐳 Docker Deployment (Production & Testing)
 
-The backend includes a built-in script to test the facial recognition model's accuracy against a dataset of images.
+To easily spin up the entire application (MySQL Database, FastAPI Backend, and React Frontend) using Docker, run the following command from the root directory:
 
-1. **Prepare Test Data**: Inside the `backend` directory, create a folder named `test_images`.
-2. **Organize by Employee**: Inside `test_images`, create subfolders for each employee using their exact name (matching the database).
-3. **Add Images**: Place testing images (different from the training images) inside the corresponding employee's folder.
-
-**Folder Structure Example**:
-```text
-backend/
-└── test_images/
-    ├── John Doe/
-    │   ├── test_img1.jpg
-    │   └── test_img2.jpg
-    └── Jane Smith/
-        └── test_img1.jpg
-```
-
-4. **Run the Test**: Ensure your virtual environment is activated, then run the script:
 ```bash
-cd backend
-python test_accuracy.py
+docker-compose --env-file .env.docker up --build
 ```
-
-The script will output the recognition results per image, followed by an overall accuracy report (correct matches, false positives, false negatives).
+> The API will be available at `http://localhost:8000` and the HR portal at `http://localhost:5173`.
 
 ---
 

@@ -11,6 +11,7 @@ from sqlalchemy import update
 from app.db.database import get_db
 from app.db.models import HRUser
 from app.core.security import get_current_user
+from app.core.storage import save_to_r2_or_local
 
 router = APIRouter()
 LOGOS_DIR = "static/logos"
@@ -30,7 +31,14 @@ def get_settings_data(hr_user_id: int):
         "logoUrl": "",
         "workingDays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
         "lateThresholdTime": "10:00",
-        "modules": ["overview", "employees", "kiosk", "reports", "unknown_identity"]
+        "modules": ["overview", "employees", "kiosk", "reports", "unknown_identity"],
+        "planId": "basic",
+        "planName": "Basic Plan",
+        "billingCycle": "monthly",
+        "subscriptionStatus": "active",
+        "maxEmployees": 50,
+        "planStartedAt": None,
+        "planExpiresAt": None
     }
     if not os.path.exists(settings_file):
         # Fallback to general settings.json if exists (migration)
@@ -134,12 +142,14 @@ async def upload_logo(file: UploadFile = File(...), hr_user_id: int = Depends(ge
     
     file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
     new_filename = f"logo_{hr_user_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
-    file_path = os.path.join(LOGOS_DIR, new_filename)
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    logo_url = f"/api/static/logos/{new_filename}"
+    content = await file.read()
+    logo_url = save_to_r2_or_local(
+        file_bytes=content,
+        filename=new_filename,
+        subfolder="logos",
+        content_type=file.content_type or "image/png"
+    )
     
     current_settings = get_settings_data(hr_user_id)
     current_settings["logoUrl"] = logo_url

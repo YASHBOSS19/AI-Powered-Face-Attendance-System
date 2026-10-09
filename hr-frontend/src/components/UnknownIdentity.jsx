@@ -15,11 +15,23 @@ export default function UnknownIdentity() {
     apiCall('/employees').then(data => setEmployees(data.employees || [])).catch(console.error);
   }, []);
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
+
   return (
     <div className="space-y-8 mx-auto">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
         <div className="flex items-center gap-4">
-          <div onClick={() => navigate('/')} className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors shrink-0 text-gray-500 hover:text-brand-navy shadow-sm bg-white" title="Back to Dashboard">
+          <div 
+            onClick={handleBack} 
+            className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors shrink-0 text-gray-500 hover:text-brand-navy shadow-sm bg-white" 
+            title="Back to Previous Page"
+          >
             <ChevronLeft size={20} />
           </div>
           <div>

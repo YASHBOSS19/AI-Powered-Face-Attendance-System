@@ -5,7 +5,7 @@ import os
 
 # using alembic for db
 from app.core.ws_manager import manager
-from app.api import auth, employees, face, attendance, settings, super_admin
+from app.api import auth, employees, face, attendance, settings, super_admin, alerts, analytics
 from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
@@ -37,8 +37,9 @@ app.add_middleware(
 
 # Mount Static Files (ensure directory exists)
 import os
-os.makedirs("static", exist_ok=True)
+os.makedirs("static/profiles", exist_ok=True)
 app.mount("/api/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static_root")
 
 # Mount Routers
 app.include_router(auth.router)
@@ -46,6 +47,8 @@ app.include_router(employees.router)
 app.include_router(face.router)
 app.include_router(attendance.router)
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(alerts.router)
+app.include_router(analytics.router)
 app.include_router(super_admin.router)
 
 @app.websocket("/ws/attendance")

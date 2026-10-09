@@ -10,6 +10,8 @@ import GateKiosk from './components/GateKiosk';
 
 import UnknownIdentity from './components/UnknownIdentity';
 import Settings from './components/Settings';
+import AlertsCenter from './components/AlertsCenter';
+import Analytics from './components/Analytics';
 import SuperAdminLayout from './components/SuperAdminLayout';
 import SuperAdminPortal from './components/SuperAdminPortal';
 
@@ -48,8 +50,10 @@ function App() {
         {/* Standard HR Routes */}
         <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>}>
           <Route index element={<Overview />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="employees" element={<Employees />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="alerts" element={<AlertsCenter />} />
           <Route path="unknown-identity" element={<UnknownIdentity />} />
           <Route path="kiosk" element={<Kiosk />} />
           <Route path="settings" element={<Settings />} />

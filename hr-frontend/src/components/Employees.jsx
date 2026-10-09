@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { apiCall } from '../api';
+import { apiCall, getApiBaseUrl, getProfileImageUrl } from '../api';
 import {
     Users,
     UserPlus,
@@ -33,6 +33,8 @@ import {
     Phone,
     Plus
 } from 'lucide-react';
+import { generateGranularEmployeePDF } from '../utils/pdfGenerator';
+import GranularReportModal from './GranularReportModal';
 
 
 export default function Employees() {
@@ -43,6 +45,11 @@ export default function Employees() {
     const setActiveTab = (tab) => navigate(`?tab=${tab}`);
 
     const [employees, setEmployees] = useState([]);
+    const [companyName, setCompanyName] = useState('Enterprise Attendance');
+    const [logoUrl, setLogoUrl] = useState('');
+    const [downloadingEmpId, setDownloadingEmpId] = useState(null);
+    const [reportModalEmp, setReportModalEmp] = useState(null);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [editingEmployee, setEditingEmployee] = useState(null);
     const [viewingEmployee, setViewingEmployee] = useState(null);
@@ -56,6 +63,30 @@ export default function Employees() {
     const [currentPage, setCurrentPage] = useState(1);
     const [copiedId, setCopiedId] = useState(null);
     const itemsPerPage = 10;
+
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const data = await apiCall('/settings/');
+                if (data) {
+                    if (data.companyName) setCompanyName(data.companyName);
+                    if (data.logoUrl) setLogoUrl(data.logoUrl);
+                }
+            } catch {
+                const saved = localStorage.getItem('companyName');
+                const savedLogo = localStorage.getItem('logoUrl');
+                if (saved) setCompanyName(saved);
+                if (savedLogo) setLogoUrl(savedLogo);
+            }
+        };
+        loadSettings();
+    }, []);
+
+    const handleDownloadEmployeePDF = (emp) => {
+        if (!emp) return;
+        setReportModalEmp(emp);
+        setIsReportModalOpen(true);
+    };
 
     useEffect(() => {
         setCurrentPage(1);
@@ -79,6 +110,7 @@ export default function Employees() {
     // Registration Form State
     const initialRegForm = { employee_id: '', name: '', domain: '', department: '', position: '', email: '', phone: '' };
     const [regForm, setRegForm] = useState(initialRegForm);
+    const [profilePicture, setProfilePicture] = useState(null);
     const [basicCustomFields, setBasicCustomFields] = useState([]);
     const [orgCustomFields, setOrgCustomFields] = useState([]);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -107,6 +139,7 @@ export default function Employees() {
     const [editForm, setEditForm] = useState({ name: '', domain: '', department: '', position: '', email: '', phone: '' });
     const [editBasicCustomFields, setEditBasicCustomFields] = useState([]);
     const [editOrgCustomFields, setEditOrgCustomFields] = useState([]);
+    const [editProfilePicture, setEditProfilePicture] = useState(null);
     const [isUpdating, setIsUpdating] = useState(false);
 
     const handleDeleteEmployee = async (employeeId) => {
@@ -121,6 +154,7 @@ export default function Employees() {
 
     const handleEditClick = (emp) => {
         setEditingEmployee(emp);
+        setEditProfilePicture(null);
         setEditForm({ name: emp.name, domain: emp.domain, department: emp.department, position: emp.position, email: emp.email || '', phone: emp.phone || '' });
 
         const custom = emp.custom_fields || {};
@@ -161,15 +195,24 @@ export default function Employees() {
             }
         });
 
-        const payload = {
-            ...editForm,
-            custom_fields: Object.keys(customFieldsDict).length > 0 ? customFieldsDict : null
-        };
+        const formData = new FormData();
+        formData.append('name', editForm.name);
+        formData.append('domain', editForm.domain);
+        if (editForm.department) formData.append('department', editForm.department);
+        if (editForm.position) formData.append('position', editForm.position);
+        if (editForm.email) formData.append('email', editForm.email);
+        if (editForm.phone) formData.append('phone', editForm.phone);
+        if (Object.keys(customFieldsDict).length > 0) {
+            formData.append('custom_fields', JSON.stringify(customFieldsDict));
+        }
+        if (editProfilePicture) {
+            formData.append('profile_picture', editProfilePicture);
+        }
 
         try {
             await apiCall(`/employees/${editingEmployee.employee_id}`, {
                 method: 'PUT',
-                body: JSON.stringify(payload)
+                body: formData
             });
             setEditingEmployee(null);
             setActiveTab('list');
@@ -240,15 +283,25 @@ export default function Employees() {
             }
         });
 
-        const payload = {
-            ...regForm,
-            custom_fields: Object.keys(customFieldsDict).length > 0 ? customFieldsDict : null
-        };
+        const formData = new FormData();
+        formData.append('employee_id', regForm.employee_id);
+        formData.append('name', regForm.name);
+        formData.append('domain', regForm.domain);
+        if (regForm.department) formData.append('department', regForm.department);
+        if (regForm.position) formData.append('position', regForm.position);
+        if (regForm.email) formData.append('email', regForm.email);
+        if (regForm.phone) formData.append('phone', regForm.phone);
+        if (Object.keys(customFieldsDict).length > 0) {
+            formData.append('custom_fields', JSON.stringify(customFieldsDict));
+        }
+        if (profilePicture) {
+            formData.append('profile_picture', profilePicture);
+        }
 
         try {
             await apiCall('/employees/register', {
                 method: 'POST',
-                body: JSON.stringify(payload)
+                body: formData
             });
             setRegMsg({ type: 'success', text: 'Employee registered successfully!' });
             setShowSuccess(true);
@@ -264,6 +317,7 @@ export default function Employees() {
         setRegForm(initialRegForm);
         setBasicCustomFields([]);
         setOrgCustomFields([]);
+        setProfilePicture(null);
         setShowSuccess(false);
         setRegMsg({ type: '', text: '' });
     };
@@ -456,7 +510,7 @@ export default function Employees() {
 
     const handleExportJson = () => {
         // We can just redirect to the endpoint to trigger the native browser download
-        window.location.href = 'http://localhost:8000/api/employees/export-json';
+        window.location.href = `${getApiBaseUrl()}/employees/export-json`;
     };
 
     const departments = [...new Set(employees.map(e => e.department || e.domain).filter(Boolean))];
@@ -494,13 +548,29 @@ export default function Employees() {
         return sortOrder === 'asc' ? <ChevronUp size={14} className="text-brand-teal" /> : <ChevronDown size={14} className="text-brand-teal" />;
     };
 
+    const handleBack = () => {
+        if (activeTab !== 'list') {
+            setActiveTab('list');
+        } else {
+            if (window.history.length > 1) {
+                navigate(-1);
+            } else {
+                navigate('/');
+            }
+        }
+    };
+
     return (
         <div className="mx-auto animate-in fade-in duration-500">
 
             {/* Header & Navigation */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div className="flex items-center gap-4">
-                    <div onClick={() => navigate('/')} className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors shrink-0 text-gray-500 hover:text-brand-navy shadow-sm bg-white" title="Back to Dashboard">
+                    <div 
+                        onClick={handleBack} 
+                        className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors shrink-0 text-gray-500 hover:text-brand-navy shadow-sm bg-white" 
+                        title={activeTab !== 'list' ? "Back to Employee Directory" : "Back to Previous Page"}
+                    >
                         <ChevronLeft size={20} />
                     </div>
                     <div>
@@ -648,7 +718,19 @@ export default function Employees() {
                                                     </td>
                                                     <td className="px-8 py-5 whitespace-nowrap hover:bg-blue-50/50 transition-colors" title="View Employee Profile">
                                                         <div className="flex items-center gap-4">
-                                                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-brand-blue/20 to-brand-teal/20 flex items-center justify-center text-brand-navy font-bold text-lg shadow-sm border border-white group-hover:scale-105 transition-transform">
+                                                            {emp.profile_picture ? (
+                                                                <img
+                                                                    src={getProfileImageUrl(emp.profile_picture)}
+                                                                    alt={emp.name}
+                                                                    className="h-12 w-12 rounded-full object-cover shadow-sm border-2 border-white ring-1 ring-gray-100 group-hover:scale-105 transition-transform shrink-0"
+                                                                    onError={(e) => {
+                                                                        e.target.onerror = null;
+                                                                        e.target.style.display = 'none';
+                                                                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                                                    }}
+                                                                />
+                                                            ) : null}
+                                                            <div className={`h-12 w-12 rounded-full bg-gradient-to-br from-brand-blue/20 to-brand-teal/20 flex items-center justify-center text-brand-navy font-bold text-lg shadow-sm border border-white group-hover:scale-105 transition-transform shrink-0 ${emp.profile_picture ? 'hidden' : 'flex'}`}>
                                                                 {emp.name.charAt(0).toUpperCase()}
                                                             </div>
                                                             <div className="text-sm font-bold text-gray-900">{emp.name}</div>
@@ -678,12 +760,22 @@ export default function Employees() {
                                                         )}
                                                     </td>
                                                     <td className="px-8 py-5 whitespace-nowrap text-right">
-                                                        <button onClick={(e) => { e.stopPropagation(); handleEditClick(emp); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Edit Employee">
-                                                            <Edit size={18} />
-                                                        </button>
-                                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteEmployee(emp.employee_id); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors ml-2" title="Delete Employee">
-                                                            <Trash2 size={18} />
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); handleDownloadEmployeePDF(emp); }} 
+                                                                disabled={downloadingEmpId === emp.employee_id}
+                                                                className="p-2 text-rose-600 hover:bg-rose-50 rounded-full transition-colors cursor-pointer" 
+                                                                title="Download Granular PDF Dossier (Passport Photo & Logs)"
+                                                            >
+                                                                <FileText size={18} className={downloadingEmpId === emp.employee_id ? "animate-spin text-rose-400" : ""} />
+                                                            </button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleEditClick(emp); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors cursor-pointer" title="Edit Employee">
+                                                                <Edit size={18} />
+                                                            </button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleDeleteEmployee(emp.employee_id); }} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors cursor-pointer" title="Delete Employee">
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -825,6 +917,34 @@ export default function Employees() {
                                                         <div className="relative">
                                                             <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                                             <input type="tel" pattern="^\d{10}$" maxLength="10" title="Please enter exactly a 10-digit phone number" className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all outline-none" placeholder="9999999999" value={regForm.phone} onChange={(e) => setRegForm({ ...regForm, phone: e.target.value.replace(/\D/g, '') })} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1.5 md:col-span-2">
+                                                        <label className="text-sm font-semibold text-gray-700">Profile Picture</label>
+                                                        {profilePicture && (
+                                                            <div className="flex items-center gap-3 p-2.5 bg-blue-50/60 rounded-xl border border-blue-100 mb-2 animate-in fade-in duration-200">
+                                                                <img
+                                                                    src={URL.createObjectURL(profilePicture)}
+                                                                    alt="Selected preview"
+                                                                    className="w-12 h-12 rounded-xl object-cover border border-white shadow-xs"
+                                                                />
+                                                                <div className="min-w-0 flex-1">
+                                                                    <p className="text-xs font-bold text-gray-800 truncate">{profilePicture.name}</p>
+                                                                    <p className="text-[11px] text-brand-blue">{(profilePicture.size / 1024).toFixed(1)} KB • Ready to upload</p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setProfilePicture(null)}
+                                                                    className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-white transition-colors"
+                                                                    title="Remove image"
+                                                                >
+                                                                    <X size={16} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        <div className="relative">
+                                                            <UploadCloud className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                                            <input type="file" accept="image/*" className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all outline-none" onChange={(e) => setProfilePicture(e.target.files[0] || null)} />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1284,6 +1404,55 @@ export default function Employees() {
                                                     <input type="tel" pattern="^\d{10}$" maxLength="10" title="Please enter exactly a 10-digit phone number" className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all outline-none" placeholder="9999999999" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value.replace(/\D/g, '') })} />
                                                 </div>
                                             </div>
+                                            <div className="space-y-1.5 md:col-span-2">
+                                                <label className="text-sm font-semibold text-gray-700">Update Profile Picture</label>
+                                                
+                                                <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-xl border border-gray-200/80 mb-2">
+                                                    {editProfilePicture ? (
+                                                        <img
+                                                            src={URL.createObjectURL(editProfilePicture)}
+                                                            alt="New upload preview"
+                                                            className="w-14 h-14 rounded-2xl object-cover border-2 border-brand-teal shadow-xs shrink-0"
+                                                        />
+                                                    ) : editingEmployee.profile_picture ? (
+                                                        <img
+                                                            src={getProfileImageUrl(editingEmployee.profile_picture)}
+                                                            alt={editingEmployee.name}
+                                                            className="w-14 h-14 rounded-2xl object-cover border-2 border-white ring-1 ring-gray-200 shadow-xs shrink-0"
+                                                            onError={(e) => {
+                                                                e.target.onerror = null;
+                                                                e.target.style.display = 'none';
+                                                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                                            }}
+                                                        />
+                                                    ) : null}
+                                                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-blue/20 to-brand-teal/20 text-brand-navy font-bold text-xl flex items-center justify-center border border-gray-200 shrink-0 ${(editProfilePicture || editingEmployee.profile_picture) ? 'hidden' : 'flex'}`}>
+                                                        {editingEmployee.name.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0 text-xs">
+                                                        <p className="font-bold text-gray-800">
+                                                            {editProfilePicture ? 'New Image Selected' : (editingEmployee.profile_picture ? 'Current Profile Photo' : 'No photo uploaded yet')}
+                                                        </p>
+                                                        <p className="text-gray-500 mt-0.5 truncate">
+                                                            {editProfilePicture ? `${editProfilePicture.name} (${(editProfilePicture.size / 1024).toFixed(1)} KB)` : 'Choose a file below to change profile photo.'}
+                                                        </p>
+                                                        {editProfilePicture && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setEditProfilePicture(null)}
+                                                                className="text-red-500 hover:text-red-700 font-semibold mt-1 text-[11px] block"
+                                                            >
+                                                                Discard selected photo
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="relative">
+                                                    <UploadCloud className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                                    <input type="file" accept="image/*" className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue transition-all outline-none" onChange={(e) => setEditProfilePicture(e.target.files[0] || null)} />
+                                                </div>
+                                            </div>
                                         </div>
                                         {/* Edit Basic Info Custom Fields */}
                                         <div className="mt-4 space-y-3">
@@ -1386,7 +1555,19 @@ export default function Employees() {
                             </button>
 
                             <div className="flex items-center gap-5 mt-4">
-                                <div className="w-20 h-20 bg-brand-navy text-white rounded-3xl flex items-center justify-center text-3xl font-bold shadow-lg shadow-brand-navy/20 border border-brand-navy/10 shrink-0">
+                                {viewingEmployee.profile_picture ? (
+                                    <img
+                                        src={getProfileImageUrl(viewingEmployee.profile_picture)}
+                                        alt={viewingEmployee.name}
+                                        className="w-20 h-20 rounded-3xl object-cover shadow-lg border-2 border-white ring-1 ring-gray-200 shrink-0"
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.style.display = 'none';
+                                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                        }}
+                                    />
+                                ) : null}
+                                <div className={`w-20 h-20 bg-brand-navy text-white rounded-3xl flex items-center justify-center text-3xl font-bold shadow-lg shadow-brand-navy/20 border border-brand-navy/10 shrink-0 ${viewingEmployee.profile_picture ? 'hidden' : 'flex'}`}>
                                     {viewingEmployee.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
@@ -1494,21 +1675,43 @@ export default function Employees() {
 
                             </div>
 
-                            <div className="pt-8 pb-4 flex justify-end gap-3 sticky bottom-0 bg-white border-t border-white mt-8 shadow-[0_-10px_20px_white]">
+                            <div className="pt-8 pb-4 flex flex-col sm:flex-row justify-end gap-3 sticky bottom-0 bg-white border-t border-white mt-8 shadow-[0_-10px_20px_white]">
+                                <button
+                                    onClick={() => handleDownloadEmployeePDF(viewingEmployee)}
+                                    disabled={downloadingEmpId === viewingEmployee.employee_id}
+                                    className="flex-1 py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl transition-all border border-rose-200 flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-95"
+                                >
+                                    <FileText size={16} className={downloadingEmpId === viewingEmployee.employee_id ? "animate-spin" : "text-rose-600"} />
+                                    <span>{downloadingEmpId === viewingEmployee.employee_id ? 'Building PDF...' : 'Download PDF Dossier'}</span>
+                                </button>
                                 <button
                                     onClick={() => {
                                         const emp = viewingEmployee;
                                         setViewingEmployee(null);
                                         handleEditClick(emp);
                                     }}
-                                    className="w-full py-3.5 bg-brand-navy hover:bg-blue-900 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                                    className="flex-1 py-3.5 bg-brand-navy hover:bg-blue-900 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                                 >
-                                    <Edit size={16} /> Edit Employee Profile
+                                    <Edit size={16} /> Edit Profile
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Granular Report Modal */}
+            {isReportModalOpen && reportModalEmp && (
+                <GranularReportModal
+                    isOpen={isReportModalOpen}
+                    onClose={() => {
+                        setIsReportModalOpen(false);
+                        setReportModalEmp(null);
+                    }}
+                    employee={reportModalEmp}
+                    companyName={companyName}
+                    logoUrl={logoUrl}
+                />
             )}
 
         </div>
