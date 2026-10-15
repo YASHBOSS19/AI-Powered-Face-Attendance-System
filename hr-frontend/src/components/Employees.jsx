@@ -27,11 +27,15 @@ import {
     ChevronUp,
     ChevronDown,
     ChevronLeft,
-    ChevronRight,
     Check,
     Mail,
     Phone,
-    Plus
+    Plus,
+    Sparkles,
+    Compass,
+    Eye,
+    Zap,
+    Sun
 } from 'lucide-react';
 import { generateGranularEmployeePDF } from '../utils/pdfGenerator';
 import GranularReportModal from './GranularReportModal';
@@ -126,13 +130,23 @@ export default function Employees() {
     const [sqlFile, setSqlFile] = useState(null);
     const [sqlMsg, setSqlMsg] = useState({ type: '', text: '' });
 
-    // Face Link State
+    // Face Link State & Multi-Angle Biometric Studio
+    const POSE_GUIDES = [
+        { id: 'center', label: '1. Frontal', prompt: 'Look straight at camera', icon: '📸', desc: 'Direct face angle' },
+        { id: 'left', label: '2. Turn Left', prompt: 'Turn head ~25° to your LEFT', icon: '👈', desc: 'Left cheek angle' },
+        { id: 'right', label: '3. Turn Right', prompt: 'Turn head ~25° to your RIGHT', icon: '👉', desc: 'Right cheek angle' },
+        { id: 'tilt', label: '4. Tilt Up/Down', prompt: 'Tilt head slightly UP or DOWN', icon: '👆', desc: 'Vertical tilt angle' },
+        { id: 'condition', label: '5. Expression / Light', prompt: 'Smile or natural lighting variation', icon: '😊', desc: 'Multi-condition variant' },
+    ];
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [faceMsg, setFaceMsg] = useState({ type: '', text: '' });
     const [isCapturing, setIsCapturing] = useState(false);
     const [capturedImages, setCapturedImages] = useState([]);
     const [isProcessingFace, setIsProcessingFace] = useState(false);
     const [isFlipped, setIsFlipped] = useState(true);
+    const [activePoseStep, setActivePoseStep] = useState(0);
+    const [isAutoCapturing, setIsAutoCapturing] = useState(false);
+    const [autoCaptureCount, setAutoCaptureCount] = useState(null);
     const videoRef = useRef(null);
     const streamRef = useRef(null);
 
@@ -439,10 +453,13 @@ export default function Employees() {
             streamRef.current.getTracks().forEach(track => track.stop());
         }
         setIsCapturing(false);
+        setIsAutoCapturing(false);
+        setAutoCaptureCount(null);
         setCapturedImages([]);
+        setActivePoseStep(0);
     };
 
-    const handleManualCapture = () => {
+    const handleCapturePose = (poseIndex = null) => {
         if (!videoRef.current) return;
         const canvas = document.createElement('canvas');
         canvas.width = 640;
@@ -454,10 +471,69 @@ export default function Employees() {
             ctx.scale(-1, 1);
         }
         ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        setCapturedImages([...capturedImages, dataUrl]);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+        const targetIdx = poseIndex !== null ? poseIndex : activePoseStep;
+        const targetPose = POSE_GUIDES[targetIdx] || POSE_GUIDES[0];
+
+        setCapturedImages(prev => [...prev, {
+            dataUrl,
+            label: targetPose.label,
+            icon: targetPose.icon,
+            prompt: targetPose.prompt,
+            id: Date.now() + Math.random()
+        }]);
+
+        // Auto-advance to next pose step
+        if (targetIdx < POSE_GUIDES.length - 1) {
+            setActivePoseStep(targetIdx + 1);
+        }
     };
 
+    const handleManualCapture = () => {
+        handleCapturePose(activePoseStep);
+    };
+
+    const startAutoSequence = () => {
+        if (!videoRef.current || !isCapturing || isAutoCapturing) return;
+        setIsAutoCapturing(true);
+        let currentStep = 0;
+        setActivePoseStep(0);
+
+        const executeStep = () => {
+            if (currentStep >= POSE_GUIDES.length) {
+                setIsAutoCapturing(false);
+                setAutoCaptureCount(null);
+                return;
+            }
+
+            let countdown = 3;
+            setAutoCaptureCount(countdown);
+            setActivePoseStep(currentStep);
+
+            const interval = setInterval(() => {
+                countdown -= 1;
+                if (countdown > 0) {
+                    setAutoCaptureCount(countdown);
+                } else {
+                    clearInterval(interval);
+                    setAutoCaptureCount('📸');
+                    setTimeout(() => {
+                        handleCapturePose(currentStep);
+                        setAutoCaptureCount(null);
+                        currentStep += 1;
+                        if (currentStep < POSE_GUIDES.length) {
+                            setTimeout(executeStep, 700);
+                        } else {
+                            setIsAutoCapturing(false);
+                        }
+                    }, 350);
+                }
+            }, 1000);
+        };
+
+        executeStep();
+    };
 
     const removeImage = (index) => {
         const newImages = [...capturedImages];
@@ -475,10 +551,13 @@ export default function Employees() {
             return;
         }
 
-        setFaceMsg({ type: 'info', text: 'Processing and training AI model...' });
+        setFaceMsg({ type: 'info', text: 'Compiling dataset & training multi-angle AI model...' });
         setIsProcessingFace(true);
 
-        const base64Images = capturedImages.map(img => img.split(',')[1]);
+        const base64Images = capturedImages.map(img => {
+            const raw = typeof img === 'string' ? img : img.dataUrl;
+            return raw.split(',')[1];
+        });
         const emp = employees.find(e => e.employee_id === selectedEmployee);
         const embeddingName = `${emp.employee_id}_${emp.name.replace(/\s+/g, '')}`;
 
@@ -488,7 +567,7 @@ export default function Employees() {
                 body: JSON.stringify({ name: embeddingName, images: base64Images })
             });
 
-            await apiCall('/enroll', {
+            const enrollRes = await apiCall('/enroll', {
                 method: 'POST',
                 body: JSON.stringify({ name: embeddingName, images: base64Images })
             });
@@ -498,7 +577,10 @@ export default function Employees() {
                 body: JSON.stringify({ employee_id: selectedEmployee, embedding_name: embeddingName })
             });
 
-            setFaceMsg({ type: 'success', text: 'Face successfully linked and trained!' });
+            setFaceMsg({ 
+                type: 'success', 
+                text: enrollRes?.message || 'Face successfully linked with multi-angle & condition biometric vectors!' 
+            });
             stopWebcam();
             fetchEmployees();
         } catch (err) {
@@ -1204,16 +1286,23 @@ export default function Employees() {
                 {/* FACE DATA TAB */}
                 {activeTab === 'face' && (
                     <div className="p-8 animate-in fade-in duration-300">
-                        <div className=" mx-auto flex flex-col lg:flex-row gap-10">
+                        <div className="mx-auto flex flex-col lg:flex-row gap-10">
 
-                            {/* Left Column: Form & Actions */}
+                            {/* Left Column: Form, Pose Guide & Actions */}
                             <div className="flex-1 flex flex-col">
                                 <div className="mb-6">
-                                    <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                                        <Camera className="text-brand-teal" size={28} />
-                                        Biometric Enrollment
-                                    </h3>
-                                    <p className="text-gray-500 mt-2">Link facial recognition data to an existing employee profile.</p>
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                            <Camera className="text-brand-teal" size={28} />
+                                            Multi-Angle Biometric Studio
+                                        </h3>
+                                        <span className="text-[11px] font-bold px-2.5 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded-full flex items-center gap-1 shadow-xs">
+                                            <Sparkles size={12} /> AI Multi-Condition Invariance
+                                        </span>
+                                    </div>
+                                    <p className="text-gray-500 mt-2 text-sm">
+                                        Train the ArcFace recognition engine across multiple angles, head tilts, and ambient lighting conditions.
+                                    </p>
                                 </div>
 
                                 {faceMsg.text && (
@@ -1228,7 +1317,7 @@ export default function Employees() {
                                     </div>
                                 )}
 
-                                <div className="space-y-2 mb-8">
+                                <div className="space-y-2 mb-6">
                                     <label className="text-sm font-semibold text-gray-700">Select Employee</label>
                                     <select
                                         className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand-teal/20 focus:border-brand-teal transition-all outline-none font-medium text-gray-700 shadow-sm"
@@ -1242,38 +1331,101 @@ export default function Employees() {
                                         ))}
                                     </select>
                                     {employees.filter(e => !e.embedding_name).length === 0 && (
-                                        <p className="text-xs text-brand-teal font-medium mt-2">All current employees have linked face data!</p>
+                                        <p className="text-xs text-brand-teal font-medium mt-1">All current employees have linked face data!</p>
                                     )}
+                                </div>
+
+                                {/* Guided Multi-Angle Pose Checklist */}
+                                <div className="mb-6 bg-slate-50 border border-slate-200/80 rounded-2xl p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <Compass className="text-brand-navy" size={18} />
+                                            <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">Multi-Angle Pose Guidance</span>
+                                        </div>
+                                        <span className="text-xs text-brand-teal font-bold">
+                                            {capturedImages.length} captured
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                        {POSE_GUIDES.map((pose, idx) => {
+                                            const isCaptured = capturedImages.some(img => (img.label && img.label.includes(pose.label)) || (typeof img === 'object' && img.label === pose.label));
+                                            const isActive = activePoseStep === idx && isCapturing;
+                                            return (
+                                                <button
+                                                    key={pose.id}
+                                                    type="button"
+                                                    disabled={!isCapturing || isAutoCapturing}
+                                                    onClick={() => {
+                                                        setActivePoseStep(idx);
+                                                        handleCapturePose(idx);
+                                                    }}
+                                                    className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2 text-xs relative ${
+                                                        isActive 
+                                                            ? 'bg-teal-50 border-brand-teal shadow-xs ring-2 ring-brand-teal/20 text-brand-teal font-bold' 
+                                                            : isCaptured
+                                                                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 font-medium'
+                                                                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                                                    } ${(!isCapturing || isAutoCapturing) ? 'cursor-default' : 'cursor-pointer hover:shadow-xs active:scale-[0.98]'}`}
+                                                >
+                                                    <span className="text-base leading-none">{pose.icon}</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-semibold truncate">{pose.label}</span>
+                                                            {isCaptured && <Check size={14} className="text-emerald-600 shrink-0 ml-1" />}
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-500 leading-tight mt-0.5 truncate">{pose.desc}</p>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                                        <span className="flex items-center gap-1.5 font-medium">
+                                            <Sun size={13} className="text-amber-500 shrink-0" />
+                                            Dual-condition CLAHE & bilateral mirror vectors applied on save.
+                                        </span>
+                                    </div>
                                 </div>
 
                                 {/* Captured Thumbnails Grid */}
                                 <div className="flex-1">
-                                    <label className="text-sm font-semibold text-gray-700 flex justify-between">
-                                        <span>Captured Dataset</span>
-                                        <span className="text-brand-blue font-bold">{capturedImages.length} images</span>
+                                    <label className="text-sm font-semibold text-gray-700 flex justify-between items-center">
+                                        <span>Enrolled Pose Dataset</span>
+                                        <span className="text-brand-blue font-bold text-xs">{capturedImages.length} images ({capturedImages.length * 3} vectors)</span>
                                     </label>
 
-                                    <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl p-4 min-h-[140px] flex gap-3 flex-wrap items-start content-start">
+                                    <div className="mt-3 bg-gray-50 border border-gray-100 rounded-xl p-4 min-h-[130px] flex gap-3 flex-wrap items-start content-start">
                                         {capturedImages.length === 0 ? (
-                                            <p className="text-gray-400 text-sm w-full text-center py-8">No images captured yet.</p>
+                                            <p className="text-gray-400 text-sm w-full text-center py-6">
+                                                No images captured yet. Start viewfinder and click individual angles or "Auto 5-Angle Sequence".
+                                            </p>
                                         ) : (
-                                            capturedImages.map((imgUrl, index) => (
-                                                <div key={index} className="relative w-16 h-16 rounded-lg overflow-hidden shadow-sm border border-gray-200 group animate-in zoom-in-95 duration-200">
-                                                    <img src={imgUrl} alt={`Snap ${index + 1}`} className="w-full h-full object-cover" />
-                                                    <button
-                                                        onClick={() => removeImage(index)}
-                                                        className="absolute inset-0 bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
-                                                    >
-                                                        <XCircle size={24} />
-                                                    </button>
-                                                </div>
-                                            ))
+                                            capturedImages.map((imgItem, index) => {
+                                                const url = typeof imgItem === 'string' ? imgItem : imgItem.dataUrl;
+                                                const label = typeof imgItem === 'object' && imgItem.label ? imgItem.label : `Angle #${index + 1}`;
+                                                return (
+                                                    <div key={index} className="relative w-20 h-20 rounded-xl overflow-hidden shadow-sm border border-gray-200 group animate-in zoom-in-95 duration-200">
+                                                        <img src={url} alt={`Snap ${index + 1}`} className="w-full h-full object-cover" />
+                                                        <div className="absolute bottom-0 inset-x-0 bg-black/60 backdrop-blur-xs text-[9px] text-white font-semibold text-center py-0.5 truncate px-1">
+                                                            {label}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeImage(index)}
+                                                            className="absolute inset-0 bg-red-600/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                                                        >
+                                                            <XCircle size={22} />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })
                                         )}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Right Column: Camera Viewfinder */}
+                            {/* Right Column: Camera Viewfinder & Multi-Angle Controller */}
                             <div className="w-full lg:w-[480px] shrink-0 flex flex-col gap-4">
                                 <div className="w-full aspect-video md:aspect-[4/3] bg-gray-900 rounded-2xl overflow-hidden relative shadow-inner border-8 border-gray-100/50">
                                     {!isCapturing && (
@@ -1294,11 +1446,33 @@ export default function Employees() {
 
                                     {/* Viewfinder overlay */}
                                     {isCapturing && (
-                                        <div className="absolute inset-0 pointer-events-none border-2 border-brand-teal/30 m-8 rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]">
-                                            <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-brand-teal -translate-x-0.5 -translate-y-0.5"></div>
-                                            <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-brand-teal translate-x-0.5 -translate-y-0.5"></div>
-                                            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-brand-teal -translate-x-0.5 translate-y-0.5"></div>
-                                            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-brand-teal translate-x-0.5 translate-y-0.5"></div>
+                                        <div className="absolute inset-0 pointer-events-none border-2 border-brand-teal/40 m-8 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]">
+                                            <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-brand-teal -translate-x-0.5 -translate-y-0.5"></div>
+                                            <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-brand-teal translate-x-0.5 -translate-y-0.5"></div>
+                                            <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-brand-teal -translate-x-0.5 translate-y-0.5"></div>
+                                            <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-brand-teal translate-x-0.5 translate-y-0.5"></div>
+                                        </div>
+                                    )}
+
+                                    {/* Active Pose Prompt Badge */}
+                                    {isCapturing && (
+                                        <div className="absolute top-4 inset-x-4 bg-black/75 backdrop-blur-md rounded-xl p-2.5 text-center text-white border border-white/10 shadow-lg z-20">
+                                            <div className="text-[11px] uppercase tracking-wider text-teal-300 font-bold flex items-center justify-center gap-1.5">
+                                                <span>{POSE_GUIDES[activePoseStep]?.icon}</span>
+                                                <span>Active Target: {POSE_GUIDES[activePoseStep]?.label}</span>
+                                            </div>
+                                            <p className="text-xs font-medium text-slate-200 mt-0.5">
+                                                {POSE_GUIDES[activePoseStep]?.prompt}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Countdown Overlay for Auto-Sequence */}
+                                    {autoCaptureCount && (
+                                        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-xs animate-in zoom-in-75 duration-200">
+                                            <div className="w-24 h-24 rounded-full bg-brand-teal/90 text-white font-black text-4xl flex items-center justify-center shadow-2xl border-4 border-white animate-pulse">
+                                                {autoCaptureCount}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -1310,36 +1484,52 @@ export default function Employees() {
                                             disabled={!selectedEmployee}
                                             className="col-span-2 bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition-all active:scale-[0.98] shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                         >
-                                            <Camera size={20} /> Start Viewfinder
+                                            <Camera size={20} /> Start Multi-Angle Viewfinder
                                         </button>
                                     ) : (
                                         <>
                                             <button
                                                 onClick={stopWebcam}
-                                                className="bg-gray-200 text-gray-700 font-bold py-4 rounded-xl hover:bg-gray-300 transition-all active:scale-[0.98]"
+                                                className="bg-gray-200 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-300 transition-all active:scale-[0.98]"
                                             >
                                                 Cancel
                                             </button>
                                             <button
                                                 onClick={() => setIsFlipped(!isFlipped)}
                                                 title="Toggle Mirror View"
-                                                className="bg-gray-100 text-gray-700 font-bold py-4 rounded-xl hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center justify-center gap-1"
+                                                className="bg-gray-100 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-200 transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
                                             >
                                                 <FlipHorizontal size={18} /> Mirror
                                             </button>
+
+                                            {/* Auto 5-Angle Sequence Button */}
+                                            <button
+                                                onClick={startAutoSequence}
+                                                disabled={isAutoCapturing}
+                                                className="col-span-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold py-3.5 rounded-xl hover:shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm text-sm"
+                                            >
+                                                <Zap size={18} className="fill-white" />
+                                                {isAutoCapturing ? 'Auto-Capturing Poses...' : '⚡ Auto 5-Angle Sequence (3s Countdown)'}
+                                            </button>
+
+                                            {/* Manual Capture Button */}
                                             <button
                                                 onClick={handleManualCapture}
-                                                className="col-span-2 bg-brand-blue text-white font-bold py-4 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] shadow-md shadow-brand-blue/30"
+                                                disabled={isAutoCapturing}
+                                                className="col-span-2 bg-brand-blue text-white font-bold py-3.5 rounded-xl hover:bg-blue-600 transition-all active:scale-[0.98] shadow-md shadow-brand-blue/30 flex items-center justify-center gap-2 text-sm"
                                             >
-                                                Capture Photo
+                                                <Camera size={18} />
+                                                Capture "{POSE_GUIDES[activePoseStep]?.label}"
                                             </button>
+
+                                            {/* Final Save / Train Dataset Button */}
                                             <button
                                                 onClick={submitImages}
                                                 disabled={capturedImages.length === 0 || isProcessingFace}
-                                                className="col-span-2 bg-gradient-to-r from-brand-teal to-emerald-600 text-white font-bold py-4 rounded-xl hover:shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                                                className="col-span-2 bg-gradient-to-r from-brand-teal to-emerald-600 text-white font-bold py-4 rounded-xl hover:shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed mt-2 shadow-md shadow-brand-teal/20"
                                             >
                                                 {isProcessingFace ? <RefreshCw className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
-                                                {isProcessingFace ? 'Training Model...' : 'Save & Compile Dataset'}
+                                                {isProcessingFace ? 'Compiling Multi-Angle AI Vectors...' : `Compile & Save ${capturedImages.length} Poses (${capturedImages.length * 3} Vectors)`}
                                             </button>
                                         </>
                                     )}

@@ -5,7 +5,7 @@ import {
   AlertTriangle, X, UserPlus, Clock, ChevronLeft, ChevronRight, 
   ChevronDown, Menu, Settings as SettingsIcon, Calendar, Bell, 
   ShieldAlert, Check, ArrowRight, Shield, AlertOctagon, CheckCircle2,
-  Info, Sparkles, RefreshCw, TrendingUp
+  Info, Sparkles, RefreshCw, TrendingUp, FileQuestion, HelpCircle
 } from 'lucide-react';
 import { apiCall, getWebSocketUrl } from '../api';
 
@@ -29,6 +29,7 @@ export default function Dashboard() {
     seat_usage: { current: 0, limit: 50, pct: 0, plan: 'Basic Plan', remaining: 50 },
     latest_alerts: []
   });
+  const [pendingQueriesCount, setPendingQueriesCount] = useState(0);
   const bellRef = useRef(null);
 
   const loadSettings = async () => {
@@ -51,6 +52,17 @@ export default function Dashboard() {
     }
   };
 
+  const fetchPendingQueriesCount = async () => {
+    try {
+      const res = await apiCall('/attendance-queries?status=pending');
+      if (res.status === 'success' && res.counts) {
+        setPendingQueriesCount(res.counts.pending || 0);
+      }
+    } catch (err) {
+      console.warn("Could not fetch pending queries count:", err);
+    }
+  };
+
   const fetchAlertsSummary = async () => {
     try {
       const res = await apiCall('/alerts/summary');
@@ -65,6 +77,7 @@ export default function Dashboard() {
   useEffect(() => {
     loadSettings();
     fetchAlertsSummary();
+    fetchPendingQueriesCount();
 
     const handleSettingsUpdate = (e) => {
       if (e.detail) {
@@ -110,8 +123,9 @@ export default function Dashboard() {
                 return [{ id: Date.now(), image: msg.image, box: msg.box, enrolling: false, enrollName: '' }, ...prev];
              });
           }
-          if (msg.type === 'ATTENDANCE_MARKED' || msg.type === 'CHECKOUT_MARKED' || msg.type === 'UNKNOWN_FACE') {
+          if (msg.type === 'ATTENDANCE_MARKED' || msg.type === 'CHECKOUT_MARKED' || msg.type === 'UNKNOWN_FACE' || msg.type === 'NEW_ATTENDANCE_QUERY' || msg.type === 'ATTENDANCE_QUERY_RESOLVED' || msg.type === 'ATTENDANCE_QUERY_UPDATED') {
             fetchAlertsSummary();
+            fetchPendingQueriesCount();
           }
         } catch (err) {}
       };
@@ -196,6 +210,13 @@ export default function Dashboard() {
       ]
     },
     { path: '/reports', label: 'Reports', icon: <FileText size={20} /> },
+    { 
+      path: '/queries', 
+      label: 'Attendance Queries', 
+      icon: <FileQuestion size={20} />,
+      badge: pendingQueriesCount > 0 ? pendingQueriesCount : null,
+      badgeColor: 'bg-amber-500'
+    },
     { 
       path: '/alerts', 
       label: 'Alerts Center', 

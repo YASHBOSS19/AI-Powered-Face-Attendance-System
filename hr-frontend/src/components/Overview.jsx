@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { apiCall, getWebSocketUrl, getProfileImageUrl } from '../api';
 import { 
-  Users, 
+  Users, FileQuestion, 
   UserCheck, 
   Clock, 
   AlertTriangle, 
@@ -454,6 +454,14 @@ export default function Overview() {
             >
               <TrendingUp size={15} className="text-emerald-300" />
               <span>Trends Hub</span>
+            </Link>
+
+            <Link 
+              to="/queries" 
+              className="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold text-xs rounded-xl transition flex items-center gap-2 backdrop-blur-md border border-amber-400/30 shadow-xs active:scale-95"
+            >
+              <FileQuestion size={15} className="text-amber-400" />
+              <span>Attendance Queries</span>
             </Link>
 
             <a 

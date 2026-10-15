@@ -14,6 +14,9 @@ import AlertsCenter from './components/AlertsCenter';
 import Analytics from './components/Analytics';
 import SuperAdminLayout from './components/SuperAdminLayout';
 import SuperAdminPortal from './components/SuperAdminPortal';
+import EmployeeDisputePortal from './components/EmployeeDisputePortal';
+import AttendanceQueries from './components/AttendanceQueries';
+import EmployeePortal from './components/EmployeePortal';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -21,6 +24,7 @@ const PrivateRoute = ({ children }) => {
   
   if (!token) return <Navigate to="/login" />;
   if (role === 'SUPER_ADMIN') return <Navigate to="/super-admin" />;
+  if (role === 'EMPLOYEE') return <Navigate to="/employee/portal" />;
   
   return children;
 };
@@ -30,7 +34,18 @@ const SuperAdminRoute = ({ children }) => {
   const role = localStorage.getItem('role');
   
   if (!token) return <Navigate to="/login" />;
+  if (role === 'EMPLOYEE') return <Navigate to="/employee/portal" />;
   if (role !== 'SUPER_ADMIN') return <Navigate to="/" />;
+  
+  return children;
+};
+
+const EmployeeRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+  
+  if (!token) return <Navigate to="/login?tab=employee" />;
+  if (role !== 'EMPLOYEE') return <Navigate to="/" />;
   
   return children;
 };
@@ -41,6 +56,15 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/gate" element={<GateKiosk />} />
+        
+        {/* Employee Self-Service Portal Routes */}
+        <Route path="/employee/portal" element={<EmployeeRoute><EmployeePortal /></EmployeeRoute>} />
+        <Route path="/employee-portal" element={<EmployeeRoute><EmployeePortal /></EmployeeRoute>} />
+        <Route path="/employee" element={<EmployeeRoute><EmployeePortal /></EmployeeRoute>} />
+        
+        {/* Public Employee Attendance Dispute Portal */}
+        <Route path="/attendance-query" element={<EmployeeDisputePortal />} />
+        <Route path="/dispute" element={<EmployeeDisputePortal />} />
         
         {/* Super Admin Routes */}
         <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminLayout /></SuperAdminRoute>}>
@@ -53,6 +77,8 @@ function App() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="employees" element={<Employees />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="queries" element={<AttendanceQueries />} />
+          <Route path="attendance-queries" element={<AttendanceQueries />} />
           <Route path="alerts" element={<AlertsCenter />} />
           <Route path="unknown-identity" element={<UnknownIdentity />} />
           <Route path="kiosk" element={<Kiosk />} />

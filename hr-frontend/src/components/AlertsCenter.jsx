@@ -61,7 +61,7 @@ export default function AlertsCenter() {
         if (!isSubscribed) return;
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'ATTENDANCE_MARKED' || msg.type === 'CHECKOUT_MARKED' || msg.type === 'UNKNOWN_FACE') {
+          if (msg.type === 'ATTENDANCE_MARKED' || msg.type === 'CHECKOUT_MARKED' || msg.type === 'UNKNOWN_FACE' || msg.type === 'SPOOF_ATTACK_DETECTED') {
             fetchAlerts();
           }
         } catch (err) {}
@@ -167,6 +167,14 @@ export default function AlertsCenter() {
 
   // Severity styles helper
   const getSeverityBadge = (severity, type) => {
+    if (type === 'PROXY_ATTACK_ATTEMPT') {
+      return {
+        bg: 'bg-rose-50 border-rose-200 text-rose-700',
+        dot: 'bg-rose-600',
+        icon: <ShieldAlert size={16} className="text-rose-600" />,
+        label: 'Photo Proxy Blocked'
+      };
+    }
     if (type === 'LOW_ATTENDANCE') {
       return {
         bg: severity === 'critical' ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-amber-50 border-amber-200 text-amber-700',

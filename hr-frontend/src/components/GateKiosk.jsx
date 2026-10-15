@@ -15,7 +15,10 @@ import {
   UserCheck,
   LogIn,
   LogOut,
-  X
+  X,
+  FileQuestion,
+  ShieldAlert,
+  ShieldCheck
 } from 'lucide-react';
 import { apiCall } from '../api';
 
@@ -136,7 +139,7 @@ export default function GateKiosk() {
   // Handle result reset countdown
   useEffect(() => {
     if (recognitionResult) {
-      const initialTime = recognitionResult.type === 'prompt' ? 6 : 4;
+      const initialTime = recognitionResult.type === 'prompt' ? 6 : (recognitionResult.type === 'spoof' ? 5 : 4);
       setResetCountdown(initialTime);
       countdownIntervalRef.current = setInterval(() => {
         setResetCountdown(prev => {
@@ -193,27 +196,23 @@ export default function GateKiosk() {
     const vw = video.videoWidth || 640;
     const vh = video.videoHeight || 480;
     
-    // Only capture the central square (matching the UI bounding box) to prevent scanning background faces
-    const TARGET_SIZE = 480;
-    canvas.width = TARGET_SIZE;
-    canvas.height = TARGET_SIZE;
+    // Scale full frame while maintaining aspect ratio (target 640px wide) so side angles are preserved
+    const targetW = 640;
+    const targetH = Math.round(640 * (vh / vw)) || 480;
+    canvas.width = targetW;
+    canvas.height = targetH;
 
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Crop a square from the center of the original video feed
-    const cropSize = Math.min(vw, vh);
-    const startX = (vw - cropSize) / 2;
-    const startY = (vh - cropSize) / 2;
 
     if (isFlipped) {
       ctx.save();
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(video, startX, startY, cropSize, cropSize, 0, 0, TARGET_SIZE, TARGET_SIZE);
+      ctx.drawImage(video, 0, 0, targetW, targetH);
       ctx.restore();
     } else {
-      ctx.drawImage(video, startX, startY, cropSize, cropSize, 0, 0, TARGET_SIZE, TARGET_SIZE);
+      ctx.drawImage(video, 0, 0, targetW, targetH);
     }
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
@@ -227,7 +226,24 @@ export default function GateKiosk() {
       const facesList = data.faces || data.recognitions || [];
       if (data.status === 'success' && facesList.length > 0) {
         const first = facesList[0];
-        if (first.name && first.name !== 'unknown') {
+
+        // Anti-Spoofing: Photo Hard Copy & Proxy Detection
+        if (first.status === 'spoof_detected' || first.is_live === false) {
+          const spoofType = first.liveness?.spoof_type || 'PHOTO_HARD_COPY';
+          const message = first.liveness?.rejection_reason || 'Photo hard copy detected! Proxy attendance is strictly prohibited.';
+          const printConfidence = first.liveness?.print_score ? `${(first.liveness.print_score * 100).toFixed(0)}%` : null;
+          const livenessScore = first.liveness?.liveness_score ? `${(first.liveness.liveness_score * 100).toFixed(0)}%` : '0%';
+
+          setRecognitionResult({
+            type: 'spoof',
+            spoofType,
+            message,
+            printConfidence,
+            livenessScore
+          });
+
+          speak('Photo scan rejected. Proxy attendance is strictly prohibited. Please present a real face.');
+        } else if (first.name && first.name !== 'unknown') {
           let displayName = first.name;
           const empId = first.employee_id || '';
 
@@ -246,7 +262,10 @@ export default function GateKiosk() {
             displayName,
             empId,
             confidence: (first.confidence * 100).toFixed(1),
-            todayStatus: first.today_status || {}
+            todayStatus: first.today_status || {},
+            pose: first.pose,
+            lighting: first.lighting,
+            liveness: first.liveness
           });
         } else {
           setRecognitionResult({
@@ -441,6 +460,15 @@ export default function GateKiosk() {
                 {autoScan ? <Pause size={18} /> : <Play size={18} />}
                 <span>{autoScan ? 'Pause Auto-Scan' : 'Resume Auto-Scan'}</span>
               </button>
+
+              <button 
+                onClick={() => navigate('/attendance-query')}
+                className="px-5 py-4 rounded-2xl bg-amber-500/90 hover:bg-amber-400 text-slate-950 font-bold text-sm transition flex items-center gap-2 shadow-xl hover:scale-105 pointer-events-auto"
+                title="Scan failed or marked absent? Submit a query to HR"
+              >
+                <FileQuestion size={18} />
+                <span>Scan Issue? Submit Query to HR</span>
+              </button>
             </div>
           )}
 
@@ -461,8 +489,28 @@ export default function GateKiosk() {
                    <h2 className="text-5xl md:text-7xl font-black tracking-tight drop-shadow-2xl mb-4">{recognitionResult.displayName}</h2>
                    
                    {recognitionResult.empId && (
-                     <p className="text-xl md:text-2xl font-mono text-white/70 uppercase tracking-wider mb-8 drop-shadow-lg">ID: {recognitionResult.empId}</p>
+                     <p className="text-xl md:text-2xl font-mono text-white/70 uppercase tracking-wider mb-3 drop-shadow-lg">ID: {recognitionResult.empId}</p>
                    )}
+
+                   {/* Multi-Angle & Condition Badges */}
+                   <div className="flex items-center justify-center gap-2.5 flex-wrap mb-8">
+                     {recognitionResult.pose?.angle_desc && (
+                       <span className="text-sm font-bold px-3.5 py-1 bg-blue-500/30 border border-blue-400/50 text-blue-200 rounded-full backdrop-blur-md">
+                         🎯 {recognitionResult.pose.angle_desc}
+                       </span>
+                     )}
+                     {recognitionResult.lighting?.condition && (
+                       <span className="text-sm font-bold px-3.5 py-1 bg-amber-500/30 border border-amber-400/50 text-amber-200 rounded-full backdrop-blur-md">
+                         💡 {recognitionResult.lighting.condition}
+                       </span>
+                     )}
+                     <span className="text-sm font-bold px-3.5 py-1 bg-emerald-500/30 border border-emerald-400/50 text-emerald-200 rounded-full backdrop-blur-md">
+                       {recognitionResult.confidence}% Match
+                     </span>
+                     <span className="text-sm font-bold px-3.5 py-1 bg-emerald-500/30 border border-emerald-400/50 text-emerald-200 rounded-full backdrop-blur-md flex items-center gap-1.5">
+                       <ShieldCheck size={16} /> Live Verified
+                     </span>
+                   </div>
 
                    {/* Today Status */}
                    {recognitionResult.todayStatus?.has_record ? (
@@ -516,6 +564,60 @@ export default function GateKiosk() {
                  </>
                )}
 
+               {recognitionResult.type === 'spoof' && (
+                 <>
+                   <div className="relative mb-6">
+                     <div className="w-32 h-32 rounded-full bg-red-600/30 border-4 border-red-500/80 flex items-center justify-center mx-auto shadow-[0_0_60px_rgba(239,68,68,0.5)] animate-pulse">
+                       <ShieldAlert size={80} className="text-red-400" />
+                     </div>
+                   </div>
+                   
+                   <div className="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-red-500/30 border border-red-400/50 text-red-300 font-bold uppercase tracking-widest text-sm mb-4">
+                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+                     Anti-Proxy Security Block
+                   </div>
+                   
+                   <h2 className="text-4xl md:text-6xl font-black text-red-400 drop-shadow-2xl mb-4">
+                     {recognitionResult.spoofType === 'PHOTO_HARD_COPY' ? 'PHOTO HARD COPY DETECTED' : 'PROXY ATTACK REJECTED'}
+                   </h2>
+                   
+                   <p className="text-2xl text-white/90 max-w-3xl text-center leading-relaxed drop-shadow-lg mb-8">
+                     {recognitionResult.message || 'Scanning photo hard copies or screens for proxy attendance is forbidden. Please present yourself in person.'}
+                   </p>
+
+                   <div className="flex items-center justify-center gap-6 text-lg text-white/80 bg-red-950/40 border border-red-800/60 rounded-2xl py-3 px-8 backdrop-blur-md mb-8">
+                     <span>Detection: <strong className="text-red-300 font-mono">{recognitionResult.spoofType === 'PHOTO_HARD_COPY' ? 'Printed Photo Hard Copy' : 'Digital Screen Replay'}</strong></span>
+                     {recognitionResult.printConfidence && (
+                       <>
+                         <span>•</span>
+                         <span>Confidence: <strong className="text-red-300 font-mono">{recognitionResult.printConfidence}</strong></span>
+                       </>
+                     )}
+                   </div>
+
+                   <div className="flex gap-4 items-center justify-center pointer-events-auto">
+                     <button
+                       onClick={dismissPrompt}
+                       className="px-8 py-3.5 rounded-2xl bg-white/20 hover:bg-white/30 text-white font-bold text-lg backdrop-blur-md transition cursor-pointer"
+                     >
+                       Dismiss
+                     </button>
+                   </div>
+
+                   <div className="absolute bottom-12 left-0 right-0">
+                     <div className="h-1.5 w-full max-w-md mx-auto bg-white/20 rounded-full overflow-hidden">
+                       <div 
+                         className="h-full bg-red-500 transition-all duration-1000 ease-linear"
+                         style={{ width: `${(resetCountdown / 5) * 100}%` }}
+                       ></div>
+                     </div>
+                     <p className="text-sm text-white/50 mt-4 flex items-center justify-center gap-1.5 font-medium">
+                       <Clock size={16} /> Auto-dismissing in {resetCountdown}s...
+                     </p>
+                   </div>
+                 </>
+               )}
+
                {recognitionResult.type === 'confirmed' && (
                  <>
                    <CheckCircle2 size={120} className="text-green-400 drop-shadow-2xl mb-8 animate-in bounce-in" />
@@ -544,6 +646,22 @@ export default function GateKiosk() {
                    <p className="text-2xl text-white/80 max-w-2xl text-center leading-relaxed drop-shadow-lg">
                      Face not found in database. <strong>HR has been securely notified</strong> with your image for immediate registration.
                    </p>
+
+                   <div className="flex flex-col sm:flex-row gap-4 items-center justify-center my-6 pointer-events-auto">
+                     <button
+                       onClick={() => navigate('/attendance-query')}
+                       className="px-8 py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xl shadow-2xl transition flex items-center gap-2.5 hover:scale-105 active:scale-95 cursor-pointer"
+                     >
+                       <FileQuestion size={24} />
+                       <span>Are you an Employee? Submit Query to HR</span>
+                     </button>
+                     <button
+                       onClick={dismissPrompt}
+                       className="px-6 py-4 rounded-2xl bg-white/20 hover:bg-white/30 text-white font-bold text-lg backdrop-blur-md transition cursor-pointer"
+                     >
+                       Dismiss
+                     </button>
+                   </div>
                    
                    <div className="absolute bottom-12 left-0 right-0">
                      <div className="h-1.5 w-full max-w-md mx-auto bg-white/20 rounded-full overflow-hidden">

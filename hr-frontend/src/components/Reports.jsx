@@ -684,6 +684,15 @@ export default function Reports() {
             <Plus size={16} className="shrink-0" /> <span>+ Regularize</span>
           </button>
 
+          <button
+            onClick={() => navigate('/queries')}
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs sm:text-sm rounded-xl shadow-xs transition-all whitespace-nowrap shrink-0"
+            title="Review attendance dispute queries filed by employees"
+          >
+            <ShieldAlert size={16} className="text-amber-600" />
+            <span>Dispute Queries</span>
+          </button>
+
           <button 
             onClick={downloadAllReportsPDF} 
             className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs sm:text-sm rounded-xl border border-rose-200 shadow-sm transition-all whitespace-nowrap shrink-0"

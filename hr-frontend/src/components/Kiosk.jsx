@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, RefreshCw, FlipHorizontal, Play, Pause, LogIn, LogOut, CheckCircle2, AlertCircle, X, ChevronLeft } from 'lucide-react';
+import { Camera, RefreshCw, FlipHorizontal, Play, Pause, LogIn, LogOut, CheckCircle2, AlertCircle, X, ChevronLeft, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { apiCall, getProfileImageUrl } from '../api';
 
 export default function Kiosk() {
@@ -148,25 +148,57 @@ export default function Kiosk() {
          const oCtx = overlayCanvas.getContext('2d');
          oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
          
-         facesList.forEach(face => {
+          facesList.forEach(face => {
             if (face.box) {
                 const [left, top, right, bottom] = face.box;
-                const color = face.name !== 'unknown' ? '#10b981' : '#ef4444';
+                const isSpoof = face.status === 'spoof_detected' || face.is_live === false;
+                const color = isSpoof ? '#dc2626' : (face.name !== 'unknown' ? '#10b981' : '#ef4444');
+                
                 oCtx.strokeStyle = color;
-                oCtx.lineWidth = 4;
+                oCtx.lineWidth = isSpoof ? 5 : 4;
+                if (isSpoof) {
+                    oCtx.setLineDash([8, 4]);
+                } else {
+                    oCtx.setLineDash([]);
+                }
                 oCtx.strokeRect(left, top, right - left, bottom - top);
+                oCtx.setLineDash([]);
                 
                 oCtx.fillStyle = color;
-                oCtx.font = 'bold 28px Arial';
-                const displayName = face.name !== 'unknown' ? (face.name.split('_')[1] || face.name) : 'Unknown';
-                oCtx.fillText(displayName, left, top > 30 ? top - 10 : top + 30);
+                oCtx.font = 'bold 18px Arial';
+                let displayName = 'Unknown';
+                if (isSpoof) {
+                    displayName = '⛔ PHOTO DETECTED (PROXY BLOCKED)';
+                } else if (face.name !== 'unknown') {
+                    displayName = face.name.split('_')[1] || face.name;
+                }
+                const angleTag = !isSpoof && face.pose?.angle_desc && face.pose.angle_desc !== 'Frontal' ? ` • ${face.pose.angle_desc}` : '';
+                oCtx.fillText(`${displayName}${angleTag}`, left, top > 30 ? top - 10 : top + 30);
             }
-         });
+          });
       }
 
       if (data.status === 'success' && facesList.length > 0) {
         const first = facesList[0];
-        if (first.name && first.name !== 'unknown') {
+        
+        // Anti-Spoofing: Photo Hard Copy & Proxy Detection
+        if (first.status === 'spoof_detected' || first.is_live === false) {
+          const spoofType = first.liveness?.spoof_type || 'PHOTO_HARD_COPY';
+          const message = first.liveness?.rejection_reason || 'Printed photo hard copy detected! Proxy attendance is strictly blocked.';
+          const printConfidence = first.liveness?.print_score ? `${(first.liveness.print_score * 100).toFixed(0)}%` : null;
+          const livenessScore = first.liveness?.liveness_score ? `${(first.liveness.liveness_score * 100).toFixed(0)}%` : '0%';
+
+          setRecognitionResult({
+            type: 'spoof',
+            spoofType,
+            message,
+            printConfidence,
+            livenessScore
+          });
+
+          speak('Photo scan detected. Proxy attendance is strictly prohibited. Please scan in person.');
+          setTimeout(() => setRecognitionResult(null), 4500);
+        } else if (first.name && first.name !== 'unknown') {
           let displayName = first.name;
           const empId = first.employee_id || '';
 
@@ -179,6 +211,8 @@ export default function Kiosk() {
             }
           }
 
+          const spokenName = displayName.split(' ')[0] || displayName;
+
           setRecognitionResult({
             type: 'prompt',
             rawName: first.name,
@@ -186,7 +220,10 @@ export default function Kiosk() {
             empId,
             profilePicture: first.profile_picture,
             confidence: (first.confidence * 100).toFixed(1),
-            todayStatus: first.today_status || {}
+            todayStatus: first.today_status || {},
+            pose: first.pose,
+            lighting: first.lighting,
+            liveness: first.liveness
           });
           
           if (first.today_status && first.today_status.checkout) {
@@ -397,7 +434,27 @@ export default function Kiosk() {
                     </div>
 
                     <h4 className="text-lg font-bold text-gray-800">{recognitionResult.displayName}</h4>
-                    <p className="text-xs text-gray-400 mb-2">ID: {recognitionResult.empId || 'N/A'}</p>
+                    <p className="text-xs text-gray-400 mb-1.5">ID: {recognitionResult.empId || 'N/A'}</p>
+
+                    {/* Multi-Angle & Condition Badges */}
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap mb-3">
+                      {recognitionResult.pose?.angle_desc && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 text-brand-blue border border-blue-200 rounded-full flex items-center gap-1">
+                          🎯 {recognitionResult.pose.angle_desc}
+                        </span>
+                      )}
+                      {recognitionResult.lighting?.condition && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full flex items-center gap-1">
+                          💡 {recognitionResult.lighting.condition}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
+                        {recognitionResult.confidence}% Match
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1">
+                        <ShieldCheck size={12} /> Live Verified
+                      </span>
+                    </div>
 
                     <div className="bg-white border border-gray-200 rounded-xl p-2.5 mb-4 text-xs text-gray-600">
                       {recognitionResult.todayStatus?.has_record ? (
@@ -441,6 +498,54 @@ export default function Kiosk() {
                         </div>
                       </>
                     )}
+                  </div>
+                )}
+
+                {recognitionResult.type === 'spoof' && (
+                  <div className="animate-in fade-in zoom-in duration-300 text-center">
+                    <button 
+                      onClick={dismissPrompt}
+                      className="absolute -top-2 right-0 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200 transition"
+                      title="Dismiss"
+                    >
+                      <X size={18} />
+                    </button>
+
+                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3 shadow-md ring-4 ring-red-50 animate-pulse">
+                      <ShieldAlert size={36} />
+                    </div>
+
+                    <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider mb-2 border border-red-200 shadow-sm">
+                      <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span>
+                      Anti-Proxy Protection Active
+                    </div>
+
+                    <h4 className="text-base font-bold text-gray-900 mb-1">
+                      {recognitionResult.spoofType === 'PHOTO_HARD_COPY' ? 'Photo Hard Copy Detected' : 'Proxy Attendance Blocked'}
+                    </h4>
+
+                    <p className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border border-red-200 font-medium mb-3 leading-relaxed text-left">
+                      ⚠️ <strong>Proxy scanning blocked:</strong> {recognitionResult.message}
+                    </p>
+
+                    <div className="flex flex-col gap-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-xl p-2.5 text-left shadow-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-500">Attack Type:</span>
+                        <strong className="text-red-600 font-semibold">
+                          {recognitionResult.spoofType === 'PHOTO_HARD_COPY' ? 'Printed Hard Copy Photo' : 'Digital Screen Replay'}
+                        </strong>
+                      </div>
+                      {recognitionResult.printConfidence && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-500">Spoof Probability:</span>
+                          <strong className="text-red-600 font-mono font-bold">{recognitionResult.printConfidence}</strong>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center border-t pt-1 mt-0.5">
+                        <span className="text-gray-500">Human Liveness:</span>
+                        <strong className="text-gray-500 font-mono">{recognitionResult.livenessScore || '0%'} (Required &gt; 55%)</strong>
+                      </div>
+                    </div>
                   </div>
                 )}
 
