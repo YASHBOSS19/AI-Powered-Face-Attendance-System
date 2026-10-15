@@ -51,6 +51,7 @@ class Employee(Base):
     department = Column(String(255), nullable=True)
     email = Column(String(255), nullable=True)
     phone = Column(String(255), nullable=True)
+    password_hash = Column(String(255), nullable=True)
     custom_fields = Column(JSON, nullable=True)
     profile_picture = Column(String(512), nullable=True)
     registered_date = Column(DateTime, default=datetime.utcnow)
@@ -131,3 +132,42 @@ class SystemAlert(Base):
     data = Column(JSON, nullable=True)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class AttendanceQuery(Base):
+    __tablename__ = 'attendance_queries'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    hr_user_id = Column(Integer, nullable=False, default=1)
+    employee_id = Column(String(255), nullable=False)
+    employee_name = Column(String(255), nullable=False)
+    department = Column(String(255), nullable=True)
+    date = Column(String(255), nullable=False)  # Date marked absent (YYYY-MM-DD)
+    checkin_time = Column(String(255), nullable=True, default='09:00:00')
+    checkout_time = Column(String(255), nullable=True)
+    reason_category = Column(String(100), nullable=False, default='Model Failed to Scan')
+    explanation = Column(Text, nullable=False)
+    status = Column(String(50), nullable=False, default='pending')  # 'pending', 'approved', 'rejected'
+    hr_notes = Column(Text, nullable=True)
+    resolved_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+class LeaveRequest(Base):
+    __tablename__ = 'leave_requests'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    employee_id = Column(String(255), nullable=False)
+    hr_user_id = Column(Integer, default=1)
+    employee_name = Column(String(255), nullable=False)
+    department = Column(String(255), nullable=True)
+    leave_type = Column(String(100), nullable=False, default='Casual Leave')
+    start_date = Column(String(20), nullable=False)
+    end_date = Column(String(20), nullable=False)
+    days_count = Column(Integer, default=1)
+    reason = Column(Text, nullable=False)
+    status = Column(String(50), nullable=False, default='pending')  # 'pending', 'approved', 'rejected', 'cancelled'
+    applied_at = Column(DateTime, default=datetime.utcnow)
+    reviewed_by = Column(String(255), nullable=True)
+    review_notes = Column(Text, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+

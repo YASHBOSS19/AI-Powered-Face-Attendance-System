@@ -17,8 +17,16 @@ DB_PASSWORD_ENCODED = urllib.parse.quote_plus(DB_PASSWORD)
 # Use aiomysql driver for async support
 DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASSWORD_ENCODED}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# Create async engine
-engine = create_async_engine(DATABASE_URL, echo=False)
+# Create async engine with robust connection pooling
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    pool_size=15,
+    max_overflow=25,
+    pool_timeout=15
+)
 
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(

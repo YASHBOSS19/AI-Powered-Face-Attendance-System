@@ -45,3 +45,24 @@ def get_current_super_admin(credentials: HTTPAuthorizationCredentials = Depends(
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+def get_current_employee(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        employee_id = payload.get("employee_id")
+        hr_user_id = payload.get("hr_user_id")
+        role = payload.get("role")
+        if not employee_id or role != "EMPLOYEE":
+            raise HTTPException(status_code=401, detail="Employee authentication required")
+        return {
+            "employee_id": employee_id,
+            "hr_user_id": hr_user_id or 1,
+            "role": role,
+            "name": payload.get("name")
+        }
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid employee token")
+

@@ -5,13 +5,25 @@ import os
 
 # using alembic for db
 from app.core.ws_manager import manager
-from app.api import auth, employees, face, attendance, settings, super_admin, alerts, analytics
+from app.api import auth, employees, face, attendance, settings, super_admin, alerts, analytics, attendance_queries, employee_portal
 from fastapi.staticfiles import StaticFiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
     print("[*] Starting HR Backend...")
+    try:
+        from app.db.database import engine
+        from app.db.models import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[*] Database tables verified.")
+        
+        from app.core.liveness import get_liveness_detector
+        get_liveness_detector()
+        print("[*] Anti-spoofing liveness model preloaded and ready.")
+    except Exception as e:
+        print("[!] DB initialization / warmup notice:", e)
     yield
     # Shutdown logic
     print("[*] Shutting down...")
@@ -50,6 +62,8 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(alerts.router)
 app.include_router(analytics.router)
 app.include_router(super_admin.router)
+app.include_router(attendance_queries.router)
+app.include_router(employee_portal.router)
 
 @app.websocket("/ws/attendance")
 async def websocket_attendance(websocket: WebSocket):

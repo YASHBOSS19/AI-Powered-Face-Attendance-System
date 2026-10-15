@@ -11,6 +11,12 @@ async def get_today_status(db: AsyncSession, name: str, hr_user_id: int, employe
     today_str = date.today().strftime("%Y-%m-%d")
     name = name.strip()
     
+    if employee_id:
+        emp_res = await db.execute(select(Employee.hr_user_id).where(Employee.employee_id == employee_id))
+        emp_hr = emp_res.scalar()
+        if emp_hr is not None:
+            hr_user_id = emp_hr
+
     query = select(Attendance).where(
         Attendance.hr_user_id == hr_user_id,
         Attendance.date == today_str
@@ -48,14 +54,14 @@ async def record_checkin(db: AsyncSession, name: str, hr_user_id: int, employee_
 
     domain = 'Unknown'
     if employee_id:
-        emp_query = select(Employee.domain).where(
-            Employee.employee_id == employee_id,
-            Employee.hr_user_id == hr_user_id
+        emp_query = select(Employee.domain, Employee.hr_user_id).where(
+            Employee.employee_id == employee_id
         )
         emp_res = await db.execute(emp_query)
-        emp_domain = emp_res.scalars().first()
-        if emp_domain:
-            domain = emp_domain
+        emp_row = emp_res.first()
+        if emp_row:
+            domain = emp_row.domain or 'Unknown'
+            hr_user_id = emp_row.hr_user_id
 
     existing = await get_today_status(db, name, hr_user_id, employee_id)
     if existing["has_record"]:
@@ -99,14 +105,14 @@ async def record_checkout(db: AsyncSession, name: str, hr_user_id: int, employee
 
     domain = 'Unknown'
     if employee_id:
-        emp_query = select(Employee.domain).where(
-            Employee.employee_id == employee_id,
-            Employee.hr_user_id == hr_user_id
+        emp_query = select(Employee.domain, Employee.hr_user_id).where(
+            Employee.employee_id == employee_id
         )
         emp_res = await db.execute(emp_query)
-        emp_domain = emp_res.scalars().first()
-        if emp_domain:
-            domain = emp_domain
+        emp_row = emp_res.first()
+        if emp_row:
+            domain = emp_row.domain or 'Unknown'
+            hr_user_id = emp_row.hr_user_id
 
     existing = await get_today_status(db, name, hr_user_id, employee_id)
     if existing["has_record"]:
@@ -217,7 +223,15 @@ async def get_attendance_report(db: AsyncSession, hr_user_id: int, date_from: st
     ]
 
 async def get_employee_attendance(db: AsyncSession, hr_user_id: int, employee_id: str = None, name: str = None, date_from: str = None, date_to: str = None):
-    query = select(Attendance).where(Attendance.hr_user_id == hr_user_id)
+    user_res = await db.execute(select(HRUser).where(HRUser.id == hr_user_id))
+    user_obj = user_res.scalars().first()
+    is_super = bool(user_obj and user_obj.role == 'SUPER_ADMIN')
+
+    if is_super:
+        query = select(Attendance)
+    else:
+        query = select(Attendance).where(or_(Attendance.hr_user_id == hr_user_id, Attendance.hr_user_id == 0))
+
     
     if employee_id and name:
         query = query.where(or_(Attendance.employee_id == employee_id, Attendance.name == name))
@@ -377,10 +391,21 @@ async def create_manual_attendance(
         emp_res = await db.execute(emp_q)
         emp = emp_res.scalars().first()
 
+    if not emp:
+        # Fallback without hr_user_id constraint (e.g. for superadmin or tenant-0 employee)
+        emp_q = select(Employee).where(
+            or_(Employee.employee_id == employee_id, Employee.name == employee_id)
+        )
+        emp_res = await db.execute(emp_q)
+        emp = emp_res.scalars().first()
+
     emp_name = emp.name if emp else None
     if not emp:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Employee '{employee_id}' was not found in your directory.")
+    
+    # Use the employee's actual hr_user_id
+    hr_user_id = emp.hr_user_id
     
     emp_domain = emp.department if emp.department else (emp.domain if emp.domain else "General")
     
